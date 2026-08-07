@@ -1,4 +1,9 @@
 
+using Microsoft.EntityFrameworkCore;
+using VCMTradingDesk.Controllers;
+using VCMTradingDesk.DataAccess;
+using VCMTradingDesk.Repos.TradeBlotter;
+
 namespace VCMTradingDesk
 {
     public class Program
@@ -10,6 +15,14 @@ namespace VCMTradingDesk
             // Add services to the container.
 
             builder.Services.AddControllers();
+            builder.Services.AddDbContext<Ivp4271tradevContext>(options =>
+                options.UseSqlServer(builder.Configuration.GetConnectionString("DBCon")));
+
+            builder.Services.AddScoped<ITradeBlotter, TradeBlotterRepo>();
+
+            builder.Services.AddCors(options => options.AddPolicy(
+                "CorsPolicy", policy => policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod()));
+
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
@@ -22,6 +35,7 @@ namespace VCMTradingDesk
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
+            app.UseCors("CorsPolicy");
 
             app.UseHttpsRedirection();
 
