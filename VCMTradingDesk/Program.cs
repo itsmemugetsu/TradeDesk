@@ -2,6 +2,8 @@
 using Microsoft.EntityFrameworkCore;
 using VCMTradingDesk.Controllers;
 using VCMTradingDesk.DataAccess;
+using VCMTradingDesk.Repos.IncrementalPositionLoader;
+using VCMTradingDesk.Repos.PnLCalculatorEngine;
 using VCMTradingDesk.Repos.TradeBlotter;
 
 namespace VCMTradingDesk
@@ -19,6 +21,8 @@ namespace VCMTradingDesk
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DBCon")));
 
             builder.Services.AddScoped<ITradeBlotter, TradeBlotterRepo>();
+            builder.Services.AddScoped<IPnLCalculatorEngine, PnLCalculatorEngineRepo>();
+            builder.Services.AddScoped<IIncrementalPositionLoader, IncrementalPositionLoaderRepo>();
 
             builder.Services.AddCors(options => options.AddPolicy(
                 "CorsPolicy", policy => policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod()));

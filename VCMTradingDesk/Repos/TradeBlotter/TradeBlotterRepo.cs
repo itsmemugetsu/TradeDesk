@@ -19,17 +19,17 @@ namespace VCMTradingDesk.Repos.TradeBlotter
         {
             var trades = new[]
             {
-        new SqlParameter("@TraderID", SqlDbType.Int) { Value = (object?)filter.TraderID ?? DBNull.Value },
+                new SqlParameter("@TraderID", SqlDbType.Int) { Value = (object?)filter.TraderID ?? DBNull.Value },
 
-        new SqlParameter("@SecurityID", SqlDbType.VarChar, 50) { Value = (object?)filter.SecurityID ?? DBNull.Value },
+                new SqlParameter("@SecurityID", SqlDbType.VarChar, 50) { Value = (object?)filter.SecurityID ?? DBNull.Value },
 
-        new SqlParameter("@AssetClass", SqlDbType.VarChar, 50) { Value = (object?)filter.AssetClass ?? DBNull.Value },
+                new SqlParameter("@AssetClass", SqlDbType.VarChar, 50) { Value = (object?)filter.AssetClass ?? DBNull.Value },
 
-        new SqlParameter("@StartDate", SqlDbType.Date) { Value = (object?)filter.StartDate ?? DBNull.Value },
+                new SqlParameter("@StartDate", SqlDbType.Date) { Value = (object?)filter.StartDate ?? DBNull.Value },
 
-        new SqlParameter("@EndDate", SqlDbType.Date) { Value = (object?)filter.EndDate ?? DBNull.Value },
+                new SqlParameter("@EndDate", SqlDbType.Date) { Value = (object?)filter.EndDate ?? DBNull.Value },
 
-        new SqlParameter("@SortDirection", SqlDbType.VarChar, 4) { Value = string.IsNullOrWhiteSpace(filter.SortDirection) ? "DESC" : filter.SortDirection }   
+                new SqlParameter("@SortDirection", SqlDbType.VarChar, 4) { Value = string.IsNullOrWhiteSpace(filter.SortDirection) ? "DESC" : filter.SortDirection }   
             };
 
             return await _context.Database
