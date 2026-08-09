@@ -4,7 +4,9 @@ using VCMTradingDesk.Controllers;
 using VCMTradingDesk.DataAccess;
 using VCMTradingDesk.Repos.IncrementalPositionLoader;
 using VCMTradingDesk.Repos.PnLCalculatorEngine;
+using VCMTradingDesk.Repos.SecuritiesView;
 using VCMTradingDesk.Repos.TradeBlotter;
+using static VCMTradingDesk.Repos.SecuritiesView.IAssetSummaryRepo;
 
 namespace VCMTradingDesk
 {
@@ -23,6 +25,7 @@ namespace VCMTradingDesk
             builder.Services.AddScoped<ITradeBlotter, TradeBlotterRepo>();
             builder.Services.AddScoped<IPnLCalculatorEngine, PnLCalculatorEngineRepo>();
             builder.Services.AddScoped<IIncrementalPositionLoader, IncrementalPositionLoaderRepo>();
+            builder.Services.AddScoped<IAssetSummaryRepo, AssetSummaryRepo>();
 
             builder.Services.AddCors(options => options.AddPolicy(
                 "CorsPolicy", policy => policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod()));
