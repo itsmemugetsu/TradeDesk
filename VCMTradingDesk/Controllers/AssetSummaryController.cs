@@ -1,9 +1,7 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using VCMTradingDesk.DTOs.Securities;
-using VCMTradingDesk.Models;
-using VCMTradingDesk.Repos.SecuritiesView;
-using static VCMTradingDesk.Repos.SecuritiesView.IAssetSummaryRepo;
+using VCM_Models.DTOs.Securities;
+using VCM_DataAccess.Repos.SecuritiesView;
 
 namespace VCMTradingDesk.Controllers
 {

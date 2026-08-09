@@ -1,12 +1,14 @@
 
 using Microsoft.EntityFrameworkCore;
+using VCM_DataAccess.DataAccess;
 using VCMTradingDesk.Controllers;
-using VCMTradingDesk.DataAccess;
-using VCMTradingDesk.Repos.IncrementalPositionLoader;
-using VCMTradingDesk.Repos.PnLCalculatorEngine;
-using VCMTradingDesk.Repos.SecuritiesView;
-using VCMTradingDesk.Repos.TradeBlotter;
-using static VCMTradingDesk.Repos.SecuritiesView.IAssetSummaryRepo;
+using VCM_DataAccess.DataAccess;
+using VCM_DataAccess.Repos;
+using VCM_DataAccess.Repos.IncrementalPositionLoader;
+using VCM_DataAccess.Repos.PnLCalculatorEngine;
+using VCM_DataAccess.Repos.SecuritiesView;
+using VCM_DataAccess.Repos.TradeBlotter;
+//using static VCM_DataAccess.Repos.SecuritiesView.IAssetSummaryRepo;
 
 namespace VCMTradingDesk
 {
@@ -19,7 +21,7 @@ namespace VCMTradingDesk
             // Add services to the container.
 
             builder.Services.AddControllers();
-            builder.Services.AddDbContext<Ivp4271tradevContext>(options =>
+            builder.Services.AddDbContext<VCMDbContext>(options =>
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DBCon")));
 
             builder.Services.AddScoped<ITradeBlotter, TradeBlotterRepo>();

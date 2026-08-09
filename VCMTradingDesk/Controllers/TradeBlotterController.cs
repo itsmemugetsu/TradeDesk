@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using VCMTradingDesk.DTOs.TradeBlotter;
-using VCMTradingDesk.Repos.TradeBlotter;
+using VCM_Models.DTOs.TradeBlotter;
+using VCM_DataAccess.Repos.TradeBlotter;
 
 namespace VCMTradingDesk.Controllers
 {
