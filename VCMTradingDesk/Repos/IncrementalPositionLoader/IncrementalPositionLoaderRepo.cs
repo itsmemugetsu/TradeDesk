@@ -20,6 +20,12 @@ namespace VCMTradingDesk.Repos.IncrementalPositionLoader
 
         public async Task<List<EodSnapshotRecordDto>> GetOrBackfillSnapshotsAsync(DateOnly targetDate)
         {
+            var effectiveDate = await _dbContext.EodPrices
+            .AsNoTracking()
+            .Where(p => p.PriceDate <= targetDate)
+            .MaxAsync(p => (DateOnly?)p.PriceDate);
+
+            targetDate = effectiveDate ?? targetDate;
 
             //Check if snapshots already exist
             var existingSnapshots = await (from s in _dbContext.EodSnapshots.AsNoTracking()
