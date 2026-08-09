@@ -18,7 +18,7 @@ namespace VCMTradingDesk.Repos.SecuritiesView
         {
             try
             {
-                // Default date fallback to 31st March 2026 
+                // Default date fallback to 31st March 2026 gits
                 var effectiveDate = asOfDate ?? new DateOnly(2026, 3, 31);
 
                 return await _dbContext.Securities

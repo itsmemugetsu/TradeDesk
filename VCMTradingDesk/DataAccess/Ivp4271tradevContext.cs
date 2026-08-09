@@ -1,6 +1,7 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
-using Microsoft.EntityFrameworkCore;
+using System.Runtime.Intrinsics.X86;
 using VCMTradingDesk.Models;
 
 namespace VCMTradingDesk.DataAccess;
@@ -29,7 +30,6 @@ public partial class Ivp4271tradevContext : DbContext
     public virtual DbSet<VwTradeHistory> VwTradeHistories { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
-//#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -39,6 +39,8 @@ public partial class Ivp4271tradevContext : DbContext
             entity
                 .HasNoKey()
                 .ToTable("EOD_Prices");
+
+            entity.HasIndex(e => new { e.PriceDate, e.SecurityId }, "IX_EodPrices_PriceDate_SecurityId_Covering");
 
             entity.Property(e => e.ClosePrice).HasColumnType("decimal(18, 4)");
             entity.Property(e => e.SecurityId)
@@ -93,6 +95,8 @@ public partial class Ivp4271tradevContext : DbContext
 
         modelBuilder.Entity<Trade>(entity =>
         {
+            entity.HasIndex(e => new { e.TradeDate, e.TraderId, e.SecurityId }, "IX_Trades_Blotter");
+
             entity.Property(e => e.TradeId)
                 .ValueGeneratedNever()
                 .HasColumnName("TradeID");
