@@ -144,7 +144,7 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
                     {
                         if (stateTracker.TryGetValue(trade.SecurityId, out var state))
                         {
-                            _calculator.ApplyTrade(state, trade);
+                          await _calculator.ApplyTradeAsync(state, trade);
                         }
                     }
                 }
@@ -155,7 +155,7 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
                     decimal closePrice = allPricesLookup.TryGetValue((currentDate, secId), out var price) ? price : 0m;
 
 
-                    var snapshotDto = _calculator.BuildSnapshot(state, currentDate, closePrice);
+                    var snapshotDto = await _calculator.BuildSnapshotAsync(state, currentDate, closePrice);
 
                     // Attach SecurityName & AssetClass from in-memory lookup
 

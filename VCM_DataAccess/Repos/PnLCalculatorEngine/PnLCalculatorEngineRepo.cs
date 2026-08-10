@@ -4,12 +4,12 @@ using VCM_Models.Models;
 namespace VCM_DataAccess.Repos.PnLCalculatorEngine
 {
     public class PnLCalculatorEngineRepo : IPnLCalculatorEngine
-    { 
-        public void ApplyTrade(SecurityPositionState state, Trade trade)
+    {
+        public Task ApplyTradeAsync(SecurityPositionState state, Trade trade)
         {
             if (state == null || trade == null || string.IsNullOrWhiteSpace(trade.BuySell))
             {
-                return; 
+                return Task.CompletedTask;
             }
 
             if (trade.BuySell.Equals("BUY", StringComparison.OrdinalIgnoreCase))
@@ -30,14 +30,15 @@ namespace VCM_DataAccess.Repos.PnLCalculatorEngine
                 state.CumulativeRealizedPnL += tradeRealizedPnL;
                 state.NetQuantity -= trade.Quantity;
             }
+            return Task.CompletedTask;
         }
 
-        public EodSnapshotRecordDto BuildSnapshot(SecurityPositionState state, DateOnly valuationDate, decimal closePrice)
+        public Task<EodSnapshotRecordDto> BuildSnapshotAsync(SecurityPositionState state, DateOnly valuationDate, decimal closePrice)
         {
             decimal unrealizedPnL = (closePrice - state.WeightedAvgCost) * state.NetQuantity;
             decimal totalPnL = state.CumulativeRealizedPnL + unrealizedPnL;
 
-            return new EodSnapshotRecordDto
+            var res = new EodSnapshotRecordDto
             {
                 ValuationDate = valuationDate,
                 SecurityId = state.SecurityId,
@@ -48,6 +49,7 @@ namespace VCM_DataAccess.Repos.PnLCalculatorEngine
                 TotalPnL = Math.Round(totalPnL, 4),
                 ClosePrice = closePrice
             };
+            return Task.FromResult(res);
         }
     }
 }

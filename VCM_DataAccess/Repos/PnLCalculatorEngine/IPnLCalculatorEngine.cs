@@ -5,8 +5,8 @@ using VCM_Models.Models;
 namespace VCM_DataAccess.Repos.PnLCalculatorEngine
 {
     public interface IPnLCalculatorEngine
-    {       
-         void ApplyTrade(SecurityPositionState state, Trade trade);
-        EodSnapshotRecordDto BuildSnapshot(SecurityPositionState state, DateOnly valuationDate, decimal closePrice);      
+    {
+        Task ApplyTradeAsync(SecurityPositionState state, Trade trade);
+        Task<EodSnapshotRecordDto> BuildSnapshotAsync(SecurityPositionState state, DateOnly valuationDate, decimal closePrice);
     }
 }

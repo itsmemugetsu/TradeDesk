@@ -18,18 +18,17 @@ namespace VCM_Testing.Repos
             _engine = new PnLCalculatorEngineRepo();
         }
 
-        // ApplyTrade - Buy & WAC Calculations
+        //Buy & WAC Calculations
 
         [Theory]
         //[InitialQty, InitialWAC, BuyQty, BuyPrice, ExpectedQty, ExpectedWAC]
-        [InlineData(0, 0.0, 100, 1000.0, 100, 1000.0)]     // First buy at 1000
-        [InlineData(100, 1000.0, 100, 1040.0, 200, 1020.0)] // Second buy at 1040 (averaging up)
-        [InlineData(100, 1000.0, 100, 960.0, 200, 980.0)]   // Second buy at 960 (averaging down)
-        [InlineData(50, 100.0, 150, 200.0, 200, 175.0)]     // Asymmetric quantities (50@100 + 150@200)
-        public void ApplyTrade_BuyTrades_CalculatesCorrectQtyAndWAC(
+        [InlineData(0, 0.0, 100, 1000.0, 100, 1000.0)]     // buy at 1000
+        [InlineData(100, 1000.0, 100, 1040.0, 200, 1020.0)] // buy at 1040 (averaging up)
+        [InlineData(100, 1000.0, 100, 960.0, 200, 980.0)]   // buy at 960 (averaging down)
+        [InlineData(50, 100.0, 150, 200.0, 200, 175.0)]     // 50@100 + 150@200
+        public async Task ApplyTrade_BuyTrades_CalculatesCorrectQtyAndWAC(
             int initQty, double initWac, int buyQty, double buyPrice, int expectedQty, double expectedWac)
         {
-          
             var state = new SecurityPositionState
             {
                 SecurityId = "BD01",
@@ -38,23 +37,23 @@ namespace VCM_Testing.Repos
             };
             var trade = new Trade { BuySell = "BUY", Quantity = buyQty, Price = (decimal)buyPrice };
 
-            _engine.ApplyTrade(state, trade);
+            await _engine.ApplyTradeAsync(state, trade);
 
             Assert.Equal(expectedQty, state.NetQuantity);
             Assert.Equal((decimal)expectedWac, state.WeightedAvgCost);
         }
 
-        
 
-        // ApplyTrade - Sell & Realized P&L Calculations
+
+        //Sell & Realized P&L Calculations
 
         [Theory]
         // Sell Trades: [InitQty, InitWAC, InitRealizedPnL, SellQty, SellPrice, ExpectedQty, ExpectedWAC, ExpectedRealizedPnL]
         [InlineData(100, 1000.0, 0.0, 50, 1050.0, 50, 1000.0, 2500.0)]   // Partial sell at profit (+2500)
         [InlineData(100, 1000.0, 0.0, 50, 950.0, 50, 1000.0, -2500.0)]   // Partial sell at loss (-2500)
         [InlineData(100, 1000.0, 0.0, 100, 1020.0, 0, 1000.0, 2000.0)]   // Complete exit at profit (+2000)
-        [InlineData(50, 1000.0, 1500.0, 50, 1010.0, 0, 1000.0, 2000.0)]  // Cumulative buildup (1500 + 500)
-        public void ApplyTrade_SellTrades_CalculatesRealizedPnLAndPreservesWAC(
+        [InlineData(50, 1000.0, 1500.0, 50, 1010.0, 0, 1000.0, 2000.0)]  // Cumulative sum (1500 + 500)
+        public async Task ApplyTrade_SellTrades_CalculatesRealizedPnLAndSameWAC(
             int initQty, double initWac, double initRealized, int sellQty, double sellPrice,
             int expectedQty, double expectedWac, double expectedRealized)
         {
@@ -67,16 +66,16 @@ namespace VCM_Testing.Repos
             };
             var trade = new Trade { BuySell = "SELL", Quantity = sellQty, Price = (decimal)sellPrice };
 
-            _engine.ApplyTrade(state, trade);
+            await _engine.ApplyTradeAsync(state, trade);
 
             Assert.Equal(expectedQty, state.NetQuantity);
-            Assert.Equal((decimal)expectedWac, state.WeightedAvgCost); // WAC must stay identical on SELL
+            Assert.Equal((decimal)expectedWac, state.WeightedAvgCost); //realized remains the same during sell
             Assert.Equal((decimal)expectedRealized, state.CumulativeRealizedPnL);
         }
 
-        
+
         //NEGATIVE TESTCASES
-        //ApplyTrade - Case Insensitivity & Invalid Sides
+        //Case Insensitivity & Invalid Sides
 
         [Theory]
         //case variations
@@ -84,13 +83,13 @@ namespace VCM_Testing.Repos
         [InlineData("buy", 100, 1000.0, 100, 1000.0)]
         [InlineData("Buy", 100, 1000.0, 100, 1000.0)]
         [InlineData("bUy", 100, 1000.0, 100, 1000.0)]
-        public void ApplyTrade_BuyCaseInsensitivity_ExecutesCorrectly(
+        public async Task ApplyTrade_BuyCaseInsensitivity_ExecutesCorrectly(
             string buySell, int buyQty, double buyPrice, int expectedQty, double expectedWac)
         {
             var state = new SecurityPositionState { SecurityId = "EQ01", NetQuantity = 0, WeightedAvgCost = 0m };
             var trade = new Trade { BuySell = buySell, Quantity = buyQty, Price = (decimal)buyPrice };
 
-            _engine.ApplyTrade(state, trade);
+            await _engine.ApplyTradeAsync(state, trade);
 
             Assert.Equal(expectedQty, state.NetQuantity);
             Assert.Equal((decimal)expectedWac, state.WeightedAvgCost);
@@ -102,12 +101,12 @@ namespace VCM_Testing.Repos
         [InlineData("SHORT")]
         [InlineData("")]
         [InlineData(null)]
-        public void ApplyTrade_InvalidTradeSide_DoesNotMutateState(string invalidSide)
-        { 
+        public async Task ApplyTrade_InvalidTradeSide_DoesNotMutateState(string invalidSide)
+        {
             var state = new SecurityPositionState { SecurityId = "EQ01", NetQuantity = 50, WeightedAvgCost = 100m, CumulativeRealizedPnL = 10m };
             var trade = new Trade { BuySell = invalidSide, Quantity = 20, Price = 150m };
 
-            _engine.ApplyTrade(state, trade);
+            await _engine.ApplyTradeAsync(state, trade);
 
             Assert.Equal(50, state.NetQuantity);
             Assert.Equal(100m, state.WeightedAvgCost);
@@ -123,9 +122,9 @@ namespace VCM_Testing.Repos
         [InlineData(0, 0.0, 1500.0, 1050.0, 0.0, 1500.0)]           // Position (Total = Realized)
         [InlineData(50, 100.0, 200.0, 100.0, 0.0, 200.0)]           // Market-2-market (Close Price == WAC)
         [InlineData(100, 1000.123456, 500.987654, 1020.555555, 2043.2099, 2544.1976)] //4 decimal check
-        public void BuildSnapshot_EodValuations_CalculatesAndRoundsCorrectly(
+        public async Task BuildSnapshot_EodValuations_CalculatesAndRoundsCorrectly(
             int netQty, double wac, double realized, double closePrice, double expectedUnrealized, double expectedTotal)
-        { 
+        {
             var valuationDate = new DateOnly(2026, 3, 31);
             var state = new SecurityPositionState
             {
@@ -135,12 +134,13 @@ namespace VCM_Testing.Repos
                 CumulativeRealizedPnL = (decimal)realized
             };
 
-            var snapshot = _engine.BuildSnapshot(state, valuationDate, (decimal)closePrice);
+            var snapshot = await _engine.BuildSnapshotAsync(state, valuationDate, (decimal)closePrice);
 
             Assert.Equal(netQty, snapshot.NetQuantity);
             Assert.Equal((decimal)expectedUnrealized, snapshot.UnrealizedPnL);
             Assert.Equal((decimal)expectedTotal, snapshot.TotalPnL);
         }
-        
+
     }
 }
+    

@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Moq;
 using System;
 using System.Collections.Generic;
@@ -15,11 +16,13 @@ namespace VCM_Testing.Controllers
     {
         private readonly Mock<IIncrementalPositionLoader> _mockPnL;
         private readonly PnLController _controller;
+        private readonly Mock<ILogger<PnLController>> _mockLogger;
 
         public PnLControllerTests()
         {
             _mockPnL = new Mock<IIncrementalPositionLoader>();
-            _controller = new PnLController(_mockPnL.Object);
+            _mockLogger = new Mock<ILogger<PnLController>>();
+            _controller = new PnLController(_mockPnL.Object, _mockLogger.Object);
         }
 
         //Positive Test Cases
@@ -90,7 +93,25 @@ namespace VCM_Testing.Controllers
             _mockPnL.Verify(x => x.GetOrBackfillSnapshotsAsync(testDate), Times.Once);
         }
 
-        
+
+        [Theory]
+        [InlineData("2026-01-01")]
+        [InlineData("2026-02-01")]
+        [InlineData("2025-12-31")]
+        public async Task GetPnL_WhenDateBeforeMinLimit_ReturnsBadRequest(string dateString)
+        {
+            var testDate = DateOnly.Parse(dateString);
+
+            var actionResult = await _controller.GetPnL(testDate);
+
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(actionResult);
+            Assert.Equal(400, badRequestResult.StatusCode);
+
+            // Verifies service engine was NEVER queried for invalid dates
+            _mockPnL.Verify(x => x.GetOrBackfillSnapshotsAsync(It.IsAny<DateOnly>()), Times.Never);
+        }
+
+
 
         //Negative Test Cases
 
