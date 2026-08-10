@@ -177,7 +177,6 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
                 .Where(s => s.ValuationDate == targetDate)
                 .ToList();
         }
-
         private async Task SaveSnapshotsBatchViaTvpAsync(List<EodSnapshotRecordDto> snapshotRecords)
         {
             var table = new DataTable();
@@ -214,6 +213,54 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
                 "EXEC dbo.sp_SaveEODPositionSnapshotsBatch @Snapshots",
                 tvpParam
             );
+        }
+        public async Task<List<PnLTrajectoryPointDto>> GetEquityCurveTrajectoryAsync(
+    DateOnly asOfDate,
+    string? assetClass = null,
+    string? securityId = null)
+        {
+            try
+            {
+                var startDate = new DateOnly(2026, 2, 2);
+
+                // Base Query joining EOD_Snapshots with Securities table
+                var query = from snap in _dbContext.EodSnapshots.AsNoTracking()
+                            join sec in _dbContext.Securities.AsNoTracking()
+                            on snap.SecurityId equals sec.SecurityId
+                            where snap.ValuationDate >= startDate && snap.ValuationDate <= asOfDate
+                            select new { snap, sec };
+
+                // Apply Asset Class Filter
+                if (!string.IsNullOrWhiteSpace(assetClass) && assetClass.ToUpper() != "ALL")
+                {
+                    query = query.Where(x => x.sec.AssetClass.ToUpper() == assetClass.ToUpper());
+                }
+
+                // Apply Security ID / Search Filter
+                if (!string.IsNullOrWhiteSpace(securityId) && securityId.ToUpper() != "ALL")
+                {
+                    var search = securityId.Trim().ToLower();
+                    query = query.Where(x => x.snap.SecurityId.ToLower().Contains(search) ||
+                                             x.sec.SecurityName.ToLower().Contains(search));
+                }
+
+                // Aggregate daily totals for the filtered scope
+                return await query
+                    .GroupBy(x => x.snap.ValuationDate)
+                    .Select(g => new PnLTrajectoryPointDto
+                    {
+                        ValuationDate = g.Key,
+                        NetCombinedPnL = g.Sum(x => (decimal?)x.snap.TotalPnL) ?? 0m,
+                        RealizedPnL = g.Sum(x => (decimal?)x.snap.RealizedPnL) ?? 0m,
+                        UnrealizedPnL = g.Sum(x => (decimal?)x.snap.UnrealizedPnL) ?? 0m
+                    })
+                    .OrderBy(x => x.ValuationDate)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to fetch equity curve trajectory: {ex.Message}", ex);
+            }
         }
     }
 }
