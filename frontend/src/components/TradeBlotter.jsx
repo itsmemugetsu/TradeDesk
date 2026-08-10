@@ -14,10 +14,13 @@ const Initial_Filters = {
 const MIN_DATE = '2026-02-02';
 const MAX_DATE = '2026-03-31';
 
-export const TradeBlotter = () => {
-  //Separate Draft Inputs from applied filters
+export const TradeBlotter = ({ isActive }) => {
+  // Separate Draft Inputs from applied filters
   const [draftFilters, setDraftFilters] = useState(Initial_Filters);
   const [appliedFilters, setAppliedFilters] = useState(Initial_Filters);
+  
+  // Track if initial API call finished
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -26,7 +29,7 @@ export const TradeBlotter = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  //fetch when filter clicked
+  // Core Data Fetcher
   const loadTrades = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -34,6 +37,7 @@ export const TradeBlotter = () => {
       const data = await fetchTradeBlotter(appliedFilters);
       setTrades(data || []);
       setCurrentPage(1);
+      setHasLoadedOnce(true); // 🟢 FIX 1: Mark as loaded so tab switching uses memory cache
     } catch (err) {
       setError(err.message || 'Failed to fetch trades.');
     } finally {
@@ -41,36 +45,49 @@ export const TradeBlotter = () => {
     }
   }, [appliedFilters]);
 
-  //fires only when filter is clicked 
+  // 🟢 FIX 2: Corrected useEffect logic
+  // - On App Load: Triggers if isActive is true and hasn't loaded yet.
+  // - On Filter Click: Triggers when appliedFilters changes (only if tab is active).
+  // - On Tab Switch: Skips execution because hasLoadedOnce is true.
   useEffect(() => {
-    loadTrades();
-  }, [loadTrades]);
+    if (isActive && !hasLoadedOnce) {
+      loadTrades();
+    }
+  }, [isActive, hasLoadedOnce, loadTrades]);
 
-  //reduces api call made
+  // Re-fetch when user explicitly submits new filters
+  useEffect(() => {
+    if (hasLoadedOnce && isActive) {
+      loadTrades();
+    }
+  }, [appliedFilters]);
+
+  // Draft inputs change handler
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setDraftFilters((prev) => ({ ...prev, [name]: value }));
   };
 
-  // clicking "Filter" applies the draft filters to trigger the API call
+  // Apply button click or Enter submit
   const handleApplyFilters = (e) => {
     if (e) e.preventDefault();
     setAppliedFilters(draftFilters);
   };
 
-  // Reset 
+  // Reset Filters
   const handleReset = () => {
     setDraftFilters(Initial_Filters);
     setAppliedFilters(Initial_Filters);
   };
 
+  // Sort Toggle
   const toggleSort = () => {
     const updatedSort = appliedFilters.sortDirection === 'DESC' ? 'ASC' : 'DESC';
     setDraftFilters((prev) => ({ ...prev, sortDirection: updatedSort }));
     setAppliedFilters((prev) => ({ ...prev, sortDirection: updatedSort }));
   };
 
-  //pagination math
+  // Pagination math
   const totalRecords = trades.length;
   const totalPages = Math.ceil(totalRecords / pageSize);
   const startIndex = (currentPage - 1) * pageSize;
@@ -101,9 +118,6 @@ export const TradeBlotter = () => {
           <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
             <Filter className="h-4 w-4 text-slate-500" /> Filter Transactions
           </div>
-          {/* <span className="text-xs text-slate-400">
-            Available records: <strong className="text-slate-600">Feb 02, 2026 – Mar 31, 2026</strong>
-          </span> */}
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -173,7 +187,6 @@ export const TradeBlotter = () => {
           </div>
 
           <div className="flex items-end gap-2">
-            {/*Executes API call on explicit click or Enter keypress */}
             <button
               type="submit"
               className="w-full h-9 inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-slate-900 text-white font-medium text-sm rounded-md hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-colors cursor-pointer"

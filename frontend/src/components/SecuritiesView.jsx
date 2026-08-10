@@ -1,26 +1,28 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Search, ShieldCheck, ArrowUpRight, ArrowDownRight, RotateCcw, Loader2, Calendar, AlertCircle } from 'lucide-react';
 import { fetchSecuritiesSummary } from '../services/securitiesservice';
 
 const MIN_DATE = '2026-02-02';
 const MAX_DATE = '2026-03-31';
 
-
 const formatDate = (dateStr) => {
   if (!dateStr) return 'N/A';
   return dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
 };
 
-export default function SecuritiesView() {
+export default function SecuritiesView({ isActive }) {
   const [activityDate, setActivityDate] = useState('2026-03-31');
   const [securities, setSecurities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Track if initial load has occurred across renders
+  const hasLoadedRef = useRef(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssetClass, setSelectedAssetClass] = useState('ALL');
 
-  // Load securities with race-condition prevention using AbortController
+  // Load securities summary data
   const loadSecurities = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -28,6 +30,7 @@ export default function SecuritiesView() {
     try {
       const data = await fetchSecuritiesSummary(activityDate);
       setSecurities(Array.isArray(data) ? data : []);
+      hasLoadedRef.current = true; // Mark initial load as complete
     } catch (err) {
       setError(err.message || 'Failed to fetch asset liquidity summary.');
       setSecurities([]);
@@ -36,11 +39,20 @@ export default function SecuritiesView() {
     }
   }, [activityDate]);
 
+  // Initial load when tab FIRST becomes active
   useEffect(() => {
-    loadSecurities();
-  }, [loadSecurities]);
+    if (isActive && !hasLoadedRef.current) {
+      loadSecurities();
+    }
+  }, [isActive, loadSecurities]);
 
- 
+  // Re-fetch ONLY when user changes As-Of Date while viewing the tab
+  useEffect(() => {
+    if (!isActive || !hasLoadedRef.current) return;
+
+    loadSecurities();
+  }, [activityDate]); 
+  
   const filteredSecurities = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -60,21 +72,21 @@ export default function SecuritiesView() {
   }, [securities, searchQuery, selectedAssetClass]);
 
   // Total Desk stats
- const stats = useMemo(() => {
-  return filteredSecurities.reduce(
-    (acc, sec) => {
-      const buys = Number(sec.buyCount) || 0;
-      const sells = Number(sec.sellCount) || 0;
-      const buyVol = Number(sec.totalBuyVolume) || 0;
-      const sellVol = Number(sec.totalSellVolume) || 0;
+  const stats = useMemo(() => {
+    return filteredSecurities.reduce(
+      (acc, sec) => {
+        const buys = Number(sec.buyCount) || 0;
+        const sells = Number(sec.sellCount) || 0;
+        const buyVol = Number(sec.totalBuyVolume) || 0;
+        const sellVol = Number(sec.totalSellVolume) || 0;
 
-      acc.totalTrades += Number(sec.totalTrades) || (buys + sells);
-      acc.totalVolume += (buyVol + sellVol);
-      return acc;
-    },
-    { totalTrades: 0, totalVolume: 0 }
-  );
-}, [filteredSecurities]);
+        acc.totalTrades += Number(sec.totalTrades) || (buys + sells);
+        acc.totalVolume += (buyVol + sellVol);
+        return acc;
+      },
+      { totalTrades: 0, totalVolume: 0 }
+    );
+  }, [filteredSecurities]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -95,7 +107,7 @@ export default function SecuritiesView() {
           </div>
         </div>
 
-        {/* Date Selector &  Refresh */}
+        {/* Date Selector & Refresh */}
         <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl p-1.5 shadow-xs">
           <div className="flex items-center gap-2 px-3 text-slate-600 text-xs font-semibold">
             <Calendar className="h-4 w-4 text-emerald-800" />

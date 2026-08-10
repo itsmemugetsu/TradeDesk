@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Search, RotateCcw, Info, Calendar, Wallet, ArrowUpRight, ArrowDownRight,
   Loader2, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown
@@ -7,10 +7,12 @@ import { fetchPnLSnapshot } from '../services/pnlservice';
 import { fetchEquityCurve } from '../services/fetchEquityCurve';
 import PnLEquityCurveChart from './PnLEquityCurveChart';
 
-export default function PnLConsole() {
+export default function PnLConsole({ isActive }) {
   const [valuationDate, setValuationDate] = useState('2026-03-31');
-  // Tracks the date of the data currently stored in state to prevent stale comparisons
   const [fetchedValuationDate, setFetchedValuationDate] = useState('2026-03-31');
+
+  // Track if initial load has occurred across renders using useRef
+  const hasLoadedRef = useRef(false);
 
   const [pnlData, setPnlData] = useState([]);
   const [chartData, setChartData] = useState([]);
@@ -41,8 +43,8 @@ export default function PnLConsole() {
       ]);
       setPnlData(snapshotData || []);
       setChartData(trajectoryData || []);
-      // Mark that pnlData now matches the requested valuationDate
       setFetchedValuationDate(valuationDate);
+      hasLoadedRef.current = true; 
     } catch (err) {
       const errorMessage =
         err.response?.data?.message ||
@@ -54,22 +56,30 @@ export default function PnLConsole() {
     }
   }, [valuationDate, selectedAssetClass, searchQuery]);
 
+  // Initial load when first tab becomes active
   useEffect(() => {
+    if (isActive && !hasLoadedRef.current) {
+      loadPnLData();
+    }
+  }, [isActive, loadPnLData]);
+
+  // re-fetch only when user changes filters/search/date while viewing the tab
+  useEffect(() => {
+    // Skip if tab is inactive OR if it hasn't loaded for the first time yet
+    if (!isActive || !hasLoadedRef.current) return;
+
     const timer = setTimeout(() => {
       loadPnLData();
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [loadPnLData]);
+  }, [valuationDate, selectedAssetClass, searchQuery]); 
 
-  // ✅ FIXED: Only evaluates disclaimer when data in state actually matches selected date
   const weekendDisclaimer = useMemo(() => {
-    // 1. If currently fetching or if data in state belongs to a previous date, do NOT display
     if (loading || fetchedValuationDate !== valuationDate) {
       return null;
     }
 
-    // 2. Only check when data in state corresponds to the selected date
     if (pnlData.length > 0) {
       const returnedDate = pnlData[0].valuationDate;
       if (returnedDate && returnedDate !== valuationDate) {
@@ -215,7 +225,7 @@ export default function PnLConsole() {
           </div>
         </div>
 
-        {/* Disclaimer Banner: Appears ONLY when the fetched response date differs from requested date */}
+        {/* Disclaimer Banner */}
         {weekendDisclaimer && (
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs flex items-center gap-2 shadow-sm">
             <Info className="h-4 w-4 text-amber-600 shrink-0" />
@@ -231,7 +241,7 @@ export default function PnLConsole() {
           activeSecurity={searchQuery}
         />
 
-        {/* Portfolio Summary Overview Cards */}
+        {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4">
             <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Realized P&L</div>
@@ -424,34 +434,6 @@ export default function PnLConsole() {
                               {assetType}
                               {isBond && <Info className="h-3 w-3 text-amber-600 cursor-pointer" />}
                             </span>
-                            {isBond && (row.faceValue || row.couponRate) && (
-                              <div className="absolute left-0 bottom-full mb-2 hidden group-hover/tooltip:block z-30 w-64 p-3 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-700 pointer-events-none">
-                                <div className="text-[11px] font-bold text-amber-400 border-b border-slate-700 pb-1.5 mb-2 flex items-center justify-between">
-                                  <span>{row.subCategory || 'Bond Specification'}</span>
-                                  <span className="text-[9px] bg-amber-500/20 px-1.5 py-0.5 rounded">SECURITIES MASTER</span>
-                                </div>
-                                <div className="space-y-1.5 text-[11px]">
-                                  {row.faceValue && (
-                                    <div className="flex justify-between">
-                                      <span className="text-slate-400">Face Value:</span>
-                                      <span className="font-mono text-white">₹{row.faceValue?.toLocaleString('en-IN')}</span>
-                                    </div>
-                                  )}
-                                  {row.couponRate && (
-                                    <div className="flex justify-between">
-                                      <span className="text-slate-400">Coupon Rate:</span>
-                                      <span className="font-mono text-emerald-400">{row.couponRate}</span>
-                                    </div>
-                                  )}
-                                  {row.maturityDate && (
-                                    <div className="flex justify-between">
-                                      <span className="text-slate-400">Maturity Date:</span>
-                                      <span className="font-mono text-white">{row.maturityDate}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
                           </div>
                         </td>
                         <td className="py-3.5 px-4 text-right font-mono font-medium text-slate-900">

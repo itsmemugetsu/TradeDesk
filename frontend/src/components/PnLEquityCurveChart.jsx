@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -8,8 +8,9 @@ import {
   Title,
   Tooltip,
   Legend,
-} from 'chart.js';
-import { Line } from 'react-chartjs-2';
+  Filler
+} from "chart.js";
+import { Line } from "react-chartjs-2";
 
 ChartJS.register(
   CategoryScale,
@@ -18,7 +19,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 export default function PnLEquityCurveChart({ data, valuationDate, activeAssetClass, activeSecurity }) {
@@ -100,15 +102,15 @@ export default function PnLEquityCurveChart({ data, valuationDate, activeAssetCl
         labels: {
           color: '#475569',
           font: { size: 12 },
-          padding: 24, // Spacing between legend items
+          padding: 24, 
           
           // Custom label generator to enforce clean solid squares
           generateLabels: (chart) => {
             return chart.data.datasets.map((dataset, i) => ({
               text: dataset.label,
-              fillStyle: dataset.borderColor,  // Fill icon with the line color
-              strokeStyle: 'transparent',      // Remove dashed border stroke
-              lineWidth: 0,                   // Eliminates jagged dash edges
+              fillStyle: dataset.borderColor,  
+              strokeStyle: 'transparent',      
+              lineWidth: 0,                   
               hidden: !chart.isDatasetVisible(i),
               datasetIndex: i,
             }));
