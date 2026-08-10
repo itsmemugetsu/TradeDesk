@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using System;
@@ -111,7 +112,28 @@ namespace VCM_Testing.Controllers
             _mockPnL.Verify(x => x.GetOrBackfillSnapshotsAsync(It.IsAny<DateOnly>()), Times.Never);
         }
 
+        //GetEquityCurveTrajectory Tests
 
+        [Theory]
+        [InlineData("2026-03-31", "Equity", "EQ01")]
+        [InlineData("2026-02-15", "Bond", "BD01")]
+        [InlineData("2026-03-10", "ETF", "ET01")]
+        public async Task GetEquityCurve_ValidFilters_ReturnsOk(string dateStr, string assetClass, string securityId)
+        {
+            var date = DateOnly.Parse(dateStr);
+            var expectedTrajectory = new List<PnLTrajectoryPointDto>();
+
+            _mockPnL
+                .Setup(x => x.GetEquityCurveTrajectoryAsync(date, assetClass, securityId))
+                .ReturnsAsync(expectedTrajectory);
+
+            var result = await _controller.GetEquityCurveTrajectory(date, assetClass, securityId);
+
+            var actionResult = Assert.IsType<ActionResult<List<PnLTrajectoryPointDto>>>(result);
+            var okResult = Assert.IsType<OkObjectResult>(actionResult.Result);
+            Assert.Equal(StatusCodes.Status200OK, okResult.StatusCode);
+            Assert.Equal(expectedTrajectory, okResult.Value);
+        }
 
         //Negative Test Cases
 
@@ -141,6 +163,25 @@ namespace VCM_Testing.Controllers
             Assert.Equal(exceptionMessage, detailsProp);
         }
 
-        
+
+        //Equity Curve exception 
+        [Theory]
+        [InlineData("2026-03-31", "Equity", "EQ01")]
+        public async Task GetEquityCurve_ExceptionThrown_Returns500(string dateStr, string assetClass, string securityId)
+        {
+            var date = DateOnly.Parse(dateStr);
+
+            _mockPnL
+                .Setup(x => x.GetEquityCurveTrajectoryAsync(It.IsAny<DateOnly>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ThrowsAsync(new Exception("Trajectory calculation error"));
+
+            var result = await _controller.GetEquityCurveTrajectory(date, assetClass, securityId);
+
+            var actionResult = Assert.IsType<ActionResult<List<PnLTrajectoryPointDto>>>(result);
+            var objectResult = Assert.IsType<ObjectResult>(actionResult.Result);
+            Assert.Equal(StatusCodes.Status500InternalServerError, objectResult.StatusCode);
+        }
+
+
     }
 }

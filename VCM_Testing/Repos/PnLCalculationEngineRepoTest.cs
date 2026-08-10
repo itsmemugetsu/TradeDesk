@@ -120,7 +120,7 @@ namespace VCM_Testing.Repos
         [InlineData(100, 1000.0, 0.0, 1020.0, 2000.0, 2000.0)]      // profit 
         [InlineData(100, 1000.0, 0.0, 980.0, -2000.0, -2000.0)]     // loss 
         [InlineData(0, 0.0, 1500.0, 1050.0, 0.0, 1500.0)]           // Position (Total = Realized)
-        [InlineData(50, 100.0, 200.0, 100.0, 0.0, 200.0)]           // Market-2-market (Close Price == WAC)
+        [InlineData(50, 100.0, 200.0, 100.0, 0.0, 200.0)]           // Market-2-market (Close Price== WAC)
         [InlineData(100, 1000.123456, 500.987654, 1020.555555, 2043.2099, 2544.1976)] //4 decimal check
         public async Task BuildSnapshot_EodValuations_CalculatesAndRoundsCorrectly(
             int netQty, double wac, double realized, double closePrice, double expectedUnrealized, double expectedTotal)
