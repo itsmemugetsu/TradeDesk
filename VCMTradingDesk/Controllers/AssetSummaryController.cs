@@ -21,14 +21,28 @@ namespace VCMTradingDesk.Controllers
         [HttpGet]
         public async Task<ActionResult<List<AssetSummaryDto>>> GetAssetSummaries([FromQuery] DateOnly? asOfDate = null)
         {
+            var targetDate = asOfDate ?? DateOnly.FromDateTime(DateTime.Today);
+            _logger.LogInformation("Requesting asset summaries for AsOfDate: {AsOfDate}", targetDate);
+
             try
             {
                 var summaries = await _assetSummaryRepo.GetAssetSummariesAsync(asOfDate);
+
+                if (summaries == null || !summaries.Any())
+                {
+                    _logger.LogWarning("No asset summaries found for AsOfDate: {AsOfDate}", targetDate);
+                }
+                else
+                {
+                    _logger.LogInformation("Successfully loaded {Count} asset summary records for AsOfDate: {AsOfDate}", summaries.Count, targetDate);
+                }
+
                 return Ok(summaries);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while retrieving asset summaries for date: {AsOfDate}", asOfDate);
+                _logger.LogError(ex, "An error occurred while fetching asset summaries for AsOfDate: {AsOfDate}", targetDate);
+
                 return StatusCode(StatusCodes.Status500InternalServerError, new
                 {
                     Message = "An unexpected error occurred while processing the asset summaries request.",

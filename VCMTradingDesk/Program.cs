@@ -35,10 +35,10 @@ namespace VCMTradingDesk
                 builder.Services.AddDbContext<VCMDbContext>(options =>
                     options.UseSqlServer(builder.Configuration.GetConnectionString("DBCon")));
 
-                builder.Services.AddScoped<ITradeBlotter, TradeBlotterRepo>();
-                builder.Services.AddScoped<IPnLCalculatorEngine, PnLCalculatorEngineRepo>();
-                builder.Services.AddScoped<IIncrementalPositionLoader, IncrementalPositionLoaderRepo>();
-                builder.Services.AddScoped<IAssetSummaryRepo, AssetSummaryRepo>();
+                builder.Services.AddTransient<ITradeBlotter, TradeBlotterRepo>();
+                builder.Services.AddTransient<IPnLCalculatorEngine, PnLCalculatorEngineRepo>();
+                builder.Services.AddTransient<IIncrementalPositionLoader, IncrementalPositionLoaderRepo>();
+                builder.Services.AddTransient<IAssetSummaryRepo, AssetSummaryRepo>();
 
                 builder.Services.AddCors(options => options.AddPolicy(
                     "CorsPolicy", policy => policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod()));
