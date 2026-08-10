@@ -7,6 +7,11 @@ namespace VCM_DataAccess.Repos.PnLCalculatorEngine
     { 
         public void ApplyTrade(SecurityPositionState state, Trade trade)
         {
+            if (state == null || trade == null || string.IsNullOrWhiteSpace(trade.BuySell))
+            {
+                return; 
+            }
+
             if (trade.BuySell.Equals("BUY", StringComparison.OrdinalIgnoreCase))
             {
                 int newQty = state.NetQuantity + trade.Quantity;
