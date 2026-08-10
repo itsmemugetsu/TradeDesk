@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VCM_DataAccess", "VCM_DataA
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VCM_Models", "VCM_Models\VCM_Models.csproj", "{C6C4D49E-30CE-4FF2-91C3-CCAAF22B0C88}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VCM_Testing", "VCM_Testing\VCM_Testing.csproj", "{F4F5D08C-280E-4A8F-A5F3-A12CB034A766}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{C6C4D49E-30CE-4FF2-91C3-CCAAF22B0C88}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C6C4D49E-30CE-4FF2-91C3-CCAAF22B0C88}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C6C4D49E-30CE-4FF2-91C3-CCAAF22B0C88}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F4F5D08C-280E-4A8F-A5F3-A12CB034A766}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4F5D08C-280E-4A8F-A5F3-A12CB034A766}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F4F5D08C-280E-4A8F-A5F3-A12CB034A766}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F4F5D08C-280E-4A8F-A5F3-A12CB034A766}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
