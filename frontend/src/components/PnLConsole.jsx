@@ -4,22 +4,25 @@ import {
   Loader2, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { fetchPnLSnapshot } from '../services/pnlservice';
+import { fetchEquityCurve } from '../services/fetchEquityCurve';
+import PnLEquityCurveChart from './PnLEquityCurveChart';
 
 export default function PnLConsole() {
   const [valuationDate, setValuationDate] = useState('2026-03-31');
+  // Tracks the date of the data currently stored in state to prevent stale comparisons
+  const [fetchedValuationDate, setFetchedValuationDate] = useState('2026-03-31');
+
   const [pnlData, setPnlData] = useState([]);
+  const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssetClass, setSelectedAssetClass] = useState('ALL');
 
-  // Decision Support States: Sorting & Strategy Presets
   const [sortColumn, setSortColumn] = useState('unrealized');
   const [sortDirection, setSortDirection] = useState('DESC');
-  const [quickFilter, setQuickFilter] = useState('ALL_OPEN');
+  const [quickFilter, setQuickFilter] = useState('ALL');
 
-  // Helper to determine asset class (uses backend value or infers from securityId prefix)
   const resolveAssetClass = (item) => {
     if (item.assetClass) return item.assetClass;
     if (item.securityId?.startsWith('BD')) return 'Bond';
@@ -32,24 +35,50 @@ export default function PnLConsole() {
     setLoading(true);
     setError(null);
     try {
-      // GET /api/PnL?valuationDate=YYYY-MM-DD
-      const data = await fetchPnLSnapshot(valuationDate);
-      setPnlData(data || []);
+      const [snapshotData, trajectoryData] = await Promise.all([
+        fetchPnLSnapshot(valuationDate),
+        fetchEquityCurve(valuationDate, selectedAssetClass, searchQuery),
+      ]);
+      setPnlData(snapshotData || []);
+      setChartData(trajectoryData || []);
+      // Mark that pnlData now matches the requested valuationDate
+      setFetchedValuationDate(valuationDate);
     } catch (err) {
-      const errorMessage = err.response?.data?.message 
-        || err.message 
-        || 'Failed to fetch PnL Snapshot.';
+      const errorMessage =
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to fetch PnL Console data.';
       setError(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [valuationDate]);
+  }, [valuationDate, selectedAssetClass, searchQuery]);
 
   useEffect(() => {
-    loadPnLData();
+    const timer = setTimeout(() => {
+      loadPnLData();
+    }, 300);
+
+    return () => clearTimeout(timer);
   }, [loadPnLData]);
 
-  // Handle Dynamic Header Sorting
+  // ✅ FIXED: Only evaluates disclaimer when data in state actually matches selected date
+  const weekendDisclaimer = useMemo(() => {
+    // 1. If currently fetching or if data in state belongs to a previous date, do NOT display
+    if (loading || fetchedValuationDate !== valuationDate) {
+      return null;
+    }
+
+    // 2. Only check when data in state corresponds to the selected date
+    if (pnlData.length > 0) {
+      const returnedDate = pnlData[0].valuationDate;
+      if (returnedDate && returnedDate !== valuationDate) {
+        return `Markets were closed on ${valuationDate}. Showing position for the last active trading session (${returnedDate}).`;
+      }
+    }
+    return null;
+  }, [pnlData, valuationDate, fetchedValuationDate, loading]);
+
   const handleSort = (columnKey) => {
     if (sortColumn === columnKey) {
       setSortDirection((prev) => (prev === 'ASC' ? 'DESC' : 'ASC'));
@@ -59,7 +88,6 @@ export default function PnLConsole() {
     }
   };
 
-  // Client-Side Data Mapping, Filtering & Sorting
   const filteredData = useMemo(() => {
     return pnlData
       .map((item) => {
@@ -69,10 +97,7 @@ export default function PnLConsole() {
         const realized = item.cumulativeRealizedPnL ?? item.realizedPnL ?? 0;
         const unrealized = item.unrealizedPnL ?? 0;
         const total = item.totalPnL ?? (realized + unrealized);
-
-        // Unrealized Return % on open capital base
         const returnPct = wac > 0 ? ((closePrice - wac) / wac) * 100 : 0;
-
         return {
           ...item,
           qty,
@@ -85,18 +110,15 @@ export default function PnLConsole() {
         };
       })
       .filter((item) => {
-        // 1. Text Search Filter
         const query = searchQuery.toLowerCase();
-        const matchesSearch = 
+        const matchesSearch =
           item.securityId?.toLowerCase().includes(query) ||
           item.securityName?.toLowerCase().includes(query);
-        
-        // 2. Asset Class Filter
+
         const assetType = resolveAssetClass(item);
-        const matchesAsset = 
+        const matchesAsset =
           selectedAssetClass === 'ALL' || assetType.toLowerCase() === selectedAssetClass.toLowerCase();
 
-        // 3. Strategy Quick Filter Presets
         let matchesQuickFilter = true;
         if (quickFilter === 'ALL_OPEN') matchesQuickFilter = item.qty > 0;
         else if (quickFilter === 'GAINERS') matchesQuickFilter = item.qty > 0 && item.unrealized > 0;
@@ -108,18 +130,15 @@ export default function PnLConsole() {
       .sort((a, b) => {
         let aVal = a[sortColumn] ?? 0;
         let bVal = b[sortColumn] ?? 0;
-
         if (typeof aVal === 'string') {
-          return sortDirection === 'ASC' 
-            ? aVal.localeCompare(bVal) 
+          return sortDirection === 'ASC'
+            ? aVal.localeCompare(bVal)
             : bVal.localeCompare(aVal);
         }
-
         return sortDirection === 'ASC' ? aVal - bVal : bVal - aVal;
       });
   }, [pnlData, searchQuery, selectedAssetClass, quickFilter, sortColumn, sortDirection]);
 
-  // Portfolio KPIs recalculated dynamically from filtered view
   const totals = useMemo(() => {
     return filteredData.reduce(
       (acc, item) => {
@@ -133,126 +152,137 @@ export default function PnLConsole() {
     );
   }, [filteredData]);
 
-  // Formatter: Indian Rupee (₹) with 3 decimal places
   const formatCurrency = (val) => {
     const isNegative = val < 0;
-    const absVal = Math.abs(val || 0).toLocaleString('en-IN', { 
-      minimumFractionDigits: 3, 
-      maximumFractionDigits: 3 
+    const absVal = Math.abs(val || 0).toLocaleString('en-IN', {
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3
     });
     return `${isNegative ? '-' : '+'}₹${absVal}`;
   };
 
-  // Helper to render sort column direction icons
   const renderSortIcon = (columnKey) => {
     if (sortColumn !== columnKey) {
       return <ArrowUpDown className="h-3 w-3 opacity-40 hover:opacity-100 transition-opacity" />;
     }
     return sortDirection === 'ASC' ? (
-      <ArrowUp className="h-3 w-3 text-emerald-400" />
+      <ArrowUp className="h-3 w-3 text-emerald-600" />
     ) : (
-      <ArrowDown className="h-3 w-3 text-emerald-400" />
+      <ArrowDown className="h-3 w-3 text-emerald-600" />
     );
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0E14] text-[#E1E4EA] font-sans p-4 md:p-8">
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        
+
         {/* Top Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1E232F] pb-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-[#161B26] border border-[#262C3A] rounded-xl text-emerald-400">
+            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-600">
               <Wallet className="h-6 w-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-wide text-white">Positions & P&L Console</h1>
+                <h1 className="text-xl font-bold tracking-wide text-slate-900">Positions & P&L Console</h1>
               </div>
-              <p className="text-xs text-[#8A93A6] mt-0.5">Mark-to-Market ledger & yield attribution</p>
+              <p className="text-xs text-slate-500 mt-0.5">Mark-to-Market ledger & yield attribution</p>
             </div>
           </div>
 
           {/* Valuation Date Picker Controls */}
-          <div className="flex items-center gap-2 bg-[#161B26] border border-[#262C3A] rounded-xl p-1.5">
-            <div className="flex items-center gap-2 px-3 text-[#8A93A6] text-xs">
-              <Calendar className="h-4 w-4 text-emerald-400" />
+          <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-sm rounded-xl p-1.5">
+            <div className="flex items-center gap-2 px-3 text-slate-500 text-xs">
+              <Calendar className="h-4 w-4 text-emerald-600" />
               <span className="font-medium">Valuation Date</span>
             </div>
             <input
               type="date"
               value={valuationDate}
+              min="2026-02-02"
+              max="2026-03-31"
               onChange={(e) => setValuationDate(e.target.value)}
-              className="bg-[#0B0E14] border border-[#262C3A] text-white text-xs font-mono font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
+              className="bg-slate-50 border border-slate-200 text-slate-900 text-xs font-mono font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
             />
             <button
               onClick={loadPnLData}
               disabled={loading}
               title="Refresh Data"
-              className="p-1.5 hover:bg-[#262C3A] text-[#8A93A6] hover:text-white rounded-lg transition-colors disabled:opacity-50"
+              className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-lg transition-colors disabled:opacity-50"
             >
-              <RotateCcw className={`h-4 w-4 ${loading ? 'animate-spin text-emerald-400' : ''}`} />
+              <RotateCcw className={`h-4 w-4 ${loading ? 'animate-spin text-emerald-600' : ''}`} />
             </button>
           </div>
         </div>
 
+        {/* Disclaimer Banner: Appears ONLY when the fetched response date differs from requested date */}
+        {weekendDisclaimer && (
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs flex items-center gap-2 shadow-sm">
+            <Info className="h-4 w-4 text-amber-600 shrink-0" />
+            <span className="font-medium">{weekendDisclaimer}</span>
+          </div>
+        )}
+
+        {/* Dynamic Trajectory Chart */}
+        <PnLEquityCurveChart
+          data={chartData}
+          valuationDate={valuationDate}
+          activeAssetClass={selectedAssetClass}
+          activeSecurity={searchQuery}
+        />
+
         {/* Portfolio Summary Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-[#121621] border border-[#1E232F] rounded-xl p-4">
-            <div className="text-xs font-medium text-[#8A93A6] uppercase tracking-wider">Total Realized P&L</div>
+          <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4">
+            <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Realized P&L</div>
             <div className="flex items-baseline gap-2 mt-2">
-              <span className={`text-2xl font-mono font-bold ${totals.realized >= 0 ? 'text-[#00D09C]' : 'text-[#EB5757]'}`}>
+              <span className={`text-2xl font-mono font-bold ${totals.realized >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {formatCurrency(totals.realized)}
               </span>
-              {totals.realized >= 0 ? <ArrowUpRight className="h-4 w-4 text-[#00D09C]" /> : <ArrowDownRight className="h-4 w-4 text-[#EB5757]" />}
+              {totals.realized >= 0 ? <ArrowUpRight className="h-4 w-4 text-emerald-600" /> : <ArrowDownRight className="h-4 w-4 text-rose-600" />}
             </div>
           </div>
-
-          <div className="bg-[#121621] border border-[#1E232F] rounded-xl p-4">
-            <div className="text-xs font-medium text-[#8A93A6] uppercase tracking-wider">Total Unrealized P&L</div>
+          <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4">
+            <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Unrealized P&L</div>
             <div className="flex items-baseline gap-2 mt-2">
-              <span className={`text-2xl font-mono font-bold ${totals.unrealized >= 0 ? 'text-[#00D09C]' : 'text-[#EB5757]'}`}>
+              <span className={`text-2xl font-mono font-bold ${totals.unrealized >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {formatCurrency(totals.unrealized)}
               </span>
-              {totals.unrealized >= 0 ? <ArrowUpRight className="h-4 w-4 text-[#00D09C]" /> : <ArrowDownRight className="h-4 w-4 text-[#EB5757]" />}
+              {totals.unrealized >= 0 ? <ArrowUpRight className="h-4 w-4 text-emerald-600" /> : <ArrowDownRight className="h-4 w-4 text-rose-600" />}
             </div>
           </div>
-
-          <div className="bg-[#121621] border border-[#1E232F] rounded-xl p-4 bg-gradient-to-br from-[#121621] to-[#171D2B]">
-            <div className="text-xs font-medium text-[#8A93A6] uppercase tracking-wider">Net Combined P&L</div>
+          <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4 bg-gradient-to-br from-white to-slate-50">
+            <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">Net Combined P&L</div>
             <div className="flex items-baseline gap-2 mt-2">
-              <span className={`text-2xl font-mono font-bold ${totals.total >= 0 ? 'text-[#00D09C]' : 'text-[#EB5757]'}`}>
+              <span className={`text-2xl font-mono font-bold ${totals.total >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {formatCurrency(totals.total)}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Controls Bar: Search, Asset Tabs & Strategy Presets */}
-        <div className="space-y-3 bg-[#121621] border border-[#1E232F] rounded-xl p-3">
+        {/* Controls Bar */}
+        <div className="space-y-3 bg-white border border-slate-200 shadow-sm rounded-xl p-3">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            {/* Text Search */}
             <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#5A6375]" />
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search ticker, security name..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#0B0E14] border border-[#262C3A] text-white text-xs rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:border-emerald-500 placeholder-[#5A6375]"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-xs rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:border-emerald-500 placeholder-slate-400"
               />
             </div>
-
-            {/* Asset Class Filter Tabs */}
-            <div className="flex items-center bg-[#0B0E14] border border-[#262C3A] rounded-lg p-1 w-full sm:w-auto">
+            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 w-full sm:w-auto">
               {['ALL', 'Equity', 'Bond', 'ETF'].map((asset) => (
                 <button
                   key={asset}
                   onClick={() => setSelectedAssetClass(asset)}
                   className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md transition-all ${
                     selectedAssetClass === asset
-                      ? 'bg-[#1E232F] text-white shadow-sm border border-[#323B4E]'
-                      : 'text-[#8A93A6] hover:text-white'
+                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {asset === 'ALL' ? 'All Assets' : asset}
@@ -260,24 +290,20 @@ export default function PnLConsole() {
               ))}
             </div>
           </div>
-
-          {/* Trader Action Strategy Presets */}
-          <div className="flex items-center gap-2 overflow-x-auto pt-2 border-t border-[#1E232F]/60">
-            <span className="text-[11px] text-[#8A93A6] font-medium mr-1 uppercase tracking-wider shrink-0">Strategy View:</span>
+          <div className="flex items-center gap-2 overflow-x-auto pt-2 border-t border-slate-100">
+            <span className="text-[11px] text-slate-500 font-medium mr-1 uppercase tracking-wider shrink-0">Strategy View:</span>
             {[
-              // { id: 'ALL_OPEN', label: 'Active Positions' },
-              { id: 'GAINERS', label: ' Top Gainers' },
-              { id: 'LOSERS', label: ' Underperformers' },
-              // { id: 'CLOSED', label: 'Closed Positions' },
               { id: 'ALL', label: 'Show All' },
+              { id: 'GAINERS', label: 'Top Gainers' },
+              { id: 'LOSERS', label: 'Underperformers' },
             ].map((preset) => (
               <button
                 key={preset.id}
                 onClick={() => setQuickFilter(preset.id)}
                 className={`px-3 py-1 text-xs font-medium rounded-lg border transition-all whitespace-nowrap ${
                   quickFilter === preset.id
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                    : 'bg-[#161B26] text-[#8A93A6] border-[#262C3A] hover:text-white'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 {preset.label}
@@ -286,88 +312,68 @@ export default function PnLConsole() {
           </div>
         </div>
 
-        {/* Error State */}
         {error && (
-          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+          <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center gap-2 shadow-sm">
             <AlertCircle className="h-4 w-4 shrink-0" /> {error}
           </div>
         )}
 
         {/* Main Terminal Table */}
-        <div className="bg-[#121621] border border-[#1E232F] rounded-xl overflow-hidden shadow-2xl">
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-[#161B26] border-b border-[#1E232F] text-[11px] font-semibold text-[#8A93A6] uppercase tracking-wider select-none">
-                  
-                  {/* Ticker */}
-                  <th onClick={() => handleSort('securityId')} className="py-3.5 px-4 cursor-pointer hover:text-white transition-colors">
+                <tr className="bg-slate-100 border-b border-slate-200 text-[11px] font-semibold text-slate-600 uppercase tracking-wider select-none">
+                  <th onClick={() => handleSort('securityId')} className="py-3.5 px-4 cursor-pointer hover:text-slate-900 transition-colors">
                     <div className="flex items-center gap-1.5">
                       <span>Ticker</span>
                       {renderSortIcon('securityId')}
                     </div>
                   </th>
-
-                  {/* Security Name */}
-                  <th onClick={() => handleSort('securityName')} className="py-3.5 px-4 cursor-pointer hover:text-white transition-colors">
+                  <th onClick={() => handleSort('securityName')} className="py-3.5 px-4 cursor-pointer hover:text-slate-900 transition-colors">
                     <div className="flex items-center gap-1.5">
                       <span>Security Name</span>
                       {renderSortIcon('securityName')}
                     </div>
                   </th>
-
                   <th className="py-3.5 px-4">Asset-Class</th>
-
-                  {/* Qty */}
-                  <th onClick={() => handleSort('qty')} className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors">
+                  <th onClick={() => handleSort('qty')} className="py-3.5 px-4 text-right cursor-pointer hover:text-slate-900 transition-colors">
                     <div className="flex items-center justify-end gap-1.5">
                       <span>Qty</span>
                       {renderSortIcon('qty')}
                     </div>
                   </th>
-
-                  {/* WAC */}
-                  <th onClick={() => handleSort('wac')} className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors">
+                  <th onClick={() => handleSort('wac')} className="py-3.5 px-4 text-right cursor-pointer hover:text-slate-900 transition-colors">
                     <div className="flex items-center justify-end gap-1.5">
                       <span>WAC (Avg)</span>
                       {renderSortIcon('wac')}
                     </div>
                   </th>
-
-                  {/* EOD Price */}
-                  <th onClick={() => handleSort('closePrice')} className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors">
+                  <th onClick={() => handleSort('closePrice')} className="py-3.5 px-4 text-right cursor-pointer hover:text-slate-900 transition-colors">
                     <div className="flex items-center justify-end gap-1.5">
                       <span>EOD Price</span>
                       {renderSortIcon('closePrice')}
                     </div>
                   </th>
-
-                  {/* Return % */}
-                  <th onClick={() => handleSort('returnPct')} className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors">
+                  <th onClick={() => handleSort('returnPct')} className="py-3.5 px-4 text-right cursor-pointer hover:text-slate-900 transition-colors">
                     <div className="flex items-center justify-end gap-1.5">
                       <span>Return %</span>
                       {renderSortIcon('returnPct')}
                     </div>
                   </th>
-
-                  {/* Realized P&L */}
-                  <th onClick={() => handleSort('realized')} className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors">
+                  <th onClick={() => handleSort('realized')} className="py-3.5 px-4 text-right cursor-pointer hover:text-slate-900 transition-colors">
                     <div className="flex items-center justify-end gap-1.5">
                       <span>Realized P&L</span>
                       {renderSortIcon('realized')}
                     </div>
                   </th>
-
-                  {/*  Unrealized P&L */}
-                  <th onClick={() => handleSort('unrealized')} className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors">
+                  <th onClick={() => handleSort('unrealized')} className="py-3.5 px-4 text-right cursor-pointer hover:text-slate-900 transition-colors">
                     <div className="flex items-center justify-end gap-1.5">
                       <span>Unrealized P&L</span>
                       {renderSortIcon('unrealized')}
                     </div>
                   </th>
-
-                  {/* Total P&L */}
-                  <th onClick={() => handleSort('total')} className="py-3.5 px-4 text-right cursor-pointer hover:text-white transition-colors">
+                  <th onClick={() => handleSort('total')} className="py-3.5 px-4 text-right cursor-pointer hover:text-slate-900 transition-colors">
                     <div className="flex items-center justify-end gap-1.5">
                       <span>Total P&L</span>
                       {renderSortIcon('total')}
@@ -375,17 +381,17 @@ export default function PnLConsole() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#1E232F] text-xs font-sans">
+              <tbody className="divide-y divide-slate-100 text-xs font-sans">
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="py-16 text-center text-[#8A93A6]">
-                      <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-emerald-400" />
+                    <td colSpan={10} className="py-16 text-center text-slate-500">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-emerald-600" />
                       Fetching position snapshots for {valuationDate}...
                     </td>
                   </tr>
                 ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-[#5A6375]">
+                    <td colSpan={10} className="py-12 text-center text-slate-400">
                       No position snapshots found matching the current filters.
                     </td>
                   </tr>
@@ -393,57 +399,53 @@ export default function PnLConsole() {
                   filteredData.map((row) => {
                     const assetType = resolveAssetClass(row);
                     const isBond = assetType === 'Bond';
-
                     return (
-                      <tr 
-                        key={row.securityId} 
-                        className={`hover:bg-[#1A202C] transition-colors ${
-                          isBond ? 'bg-[#1C1812]/50' : ''
+                      <tr
+                        key={row.securityId}
+                        className={`hover:bg-slate-50 transition-colors ${
+                          isBond ? 'bg-amber-50/40' : ''
                         }`}
                       >
-                        <td className="py-3.5 px-4 font-mono font-bold text-white tracking-wide">
+                        <td className="py-3.5 px-4 font-mono font-bold text-slate-900 tracking-wide">
                           {row.securityId}
                         </td>
-
-                        <td className="py-3.5 px-4 text-[#C2C7D0] font-medium">
+                        <td className="py-3.5 px-4 text-slate-700 font-medium">
                           {row.securityName || row.securityId}
                         </td>
-
                         <td className="py-3.5 px-4">
                           <div className="relative group/tooltip inline-block">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-md border ${
-                              isBond 
-                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' 
+                              isBond
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
                                 : assetType === 'Equity'
-                                ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
-                                : 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-purple-50 text-purple-700 border-purple-200'
                             }`}>
                               {assetType}
-                              {isBond && <Info className="h-3 w-3 text-amber-400 cursor-pointer" />}
+                              {isBond && <Info className="h-3 w-3 text-amber-600 cursor-pointer" />}
                             </span>
-
                             {isBond && (row.faceValue || row.couponRate) && (
-                              <div className="absolute left-0 bottom-full mb-2 hidden group-hover/tooltip:block z-30 w-64 p-3 bg-[#1A202C] text-white rounded-xl shadow-2xl border border-[#2E3646] pointer-events-none">
-                                <div className="text-[11px] font-bold text-amber-400 border-b border-[#2E3646] pb-1.5 mb-2 flex items-center justify-between">
+                              <div className="absolute left-0 bottom-full mb-2 hidden group-hover/tooltip:block z-30 w-64 p-3 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-700 pointer-events-none">
+                                <div className="text-[11px] font-bold text-amber-400 border-b border-slate-700 pb-1.5 mb-2 flex items-center justify-between">
                                   <span>{row.subCategory || 'Bond Specification'}</span>
                                   <span className="text-[9px] bg-amber-500/20 px-1.5 py-0.5 rounded">SECURITIES MASTER</span>
                                 </div>
                                 <div className="space-y-1.5 text-[11px]">
                                   {row.faceValue && (
                                     <div className="flex justify-between">
-                                      <span className="text-[#8A93A6]">Face Value:</span>
+                                      <span className="text-slate-400">Face Value:</span>
                                       <span className="font-mono text-white">₹{row.faceValue?.toLocaleString('en-IN')}</span>
                                     </div>
                                   )}
                                   {row.couponRate && (
                                     <div className="flex justify-between">
-                                      <span className="text-[#8A93A6]">Coupon Rate:</span>
+                                      <span className="text-slate-400">Coupon Rate:</span>
                                       <span className="font-mono text-emerald-400">{row.couponRate}</span>
                                     </div>
                                   )}
                                   {row.maturityDate && (
                                     <div className="flex justify-between">
-                                      <span className="text-[#8A93A6]">Maturity Date:</span>
+                                      <span className="text-slate-400">Maturity Date:</span>
                                       <span className="font-mono text-white">{row.maturityDate}</span>
                                     </div>
                                   )}
@@ -452,42 +454,32 @@ export default function PnLConsole() {
                             )}
                           </div>
                         </td>
-
-                        <td className="py-3.5 px-4 text-right font-mono font-medium text-white">
+                        <td className="py-3.5 px-4 text-right font-mono font-medium text-slate-900">
                           {row.qty.toLocaleString('en-IN')}
                         </td>
-
-                        <td className="py-3.5 px-4 text-right font-mono text-[#8A93A6]">
+                        <td className="py-3.5 px-4 text-right font-mono text-slate-500">
                           ₹{row.wac.toFixed(3)}
                         </td>
-
-                        <td className="py-3.5 px-4 text-right font-mono text-white font-medium">
+                        <td className="py-3.5 px-4 text-right font-mono text-slate-900 font-medium">
                           ₹{row.closePrice.toFixed(3)}
                         </td>
-
                         <td className={`py-3.5 px-4 text-right font-mono font-medium ${
-                          row.returnPct >= 0 ? 'text-[#00D09C]' : 'text-[#EB5757]'
+                          row.returnPct >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
                           {row.returnPct >= 0 ? '+' : ''}{row.returnPct.toFixed(3)}%
                         </td>
-
-                        {/* Realized PnL - Rupee with 3 Decimals */}
                         <td className={`py-3.5 px-4 text-right font-mono font-medium ${
-                          row.realized >= 0 ? 'text-[#00D09C]' : 'text-[#EB5757]'
+                          row.realized >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
                           {formatCurrency(row.realized)}
                         </td>
-
-                        {/* Unrealized PnL - Rupee with 3 Decimals */}
                         <td className={`py-3.5 px-4 text-right font-mono font-medium ${
-                          row.unrealized >= 0 ? 'text-[#00D09C]' : 'text-[#EB5757]'
+                          row.unrealized >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
                           {formatCurrency(row.unrealized)}
                         </td>
-
-                        {/* Net Total PnL - Rupee with 3 Decimals */}
                         <td className={`py-3.5 px-4 text-right font-mono font-bold ${
-                          row.total >= 0 ? 'text-[#00D09C]' : 'text-[#EB5757]'
+                          row.total >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
                           {formatCurrency(row.total)}
                         </td>
@@ -499,7 +491,6 @@ export default function PnLConsole() {
             </table>
           </div>
         </div>
-
       </div>
     </div>
   );
