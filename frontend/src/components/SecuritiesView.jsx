@@ -23,12 +23,12 @@ export default function SecuritiesView({ isActive }) {
   const [selectedAssetClass, setSelectedAssetClass] = useState('ALL');
 
   // Load securities summary data
-  const loadSecurities = useCallback(async () => {
+  const loadSecurities = useCallback(async (isManualRefresh = false) => {
     setLoading(true);
     setError(null);
 
     try {
-      const data = await fetchSecuritiesSummary(activityDate);
+      const data = await fetchSecuritiesSummary(activityDate, isManualRefresh);
       setSecurities(Array.isArray(data) ? data : []);
       hasLoadedRef.current = true; // Mark initial load as complete
     } catch (err) {
@@ -122,7 +122,7 @@ export default function SecuritiesView({ isActive }) {
             className="bg-slate-50 border border-slate-300 text-slate-900 text-xs font-mono font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-800 cursor-pointer"
           />
           <button
-            onClick={loadSecurities}
+            onClick={() => loadSecurities(true)}
             disabled={loading}
             title="Refresh Summary"
             className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50"

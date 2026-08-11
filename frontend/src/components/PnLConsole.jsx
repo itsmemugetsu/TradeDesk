@@ -6,6 +6,7 @@ import {
 import { fetchPnLSnapshot } from '../services/pnlservice';
 import { fetchEquityCurve } from '../services/fetchEquityCurve';
 import PnLEquityCurveChart from './PnLEquityCurveChart';
+import ExportPnLButton from './ExportPnLButton';
 
 export default function PnLConsole({ isActive }) {
   const [valuationDate, setValuationDate] = useState('2026-03-31');
@@ -33,12 +34,12 @@ export default function PnLConsole({ isActive }) {
     return 'Other';
   };
 
-  const loadPnLData = useCallback(async () => {
+  const loadPnLData = useCallback(async (isManualRefresh = false) => {
     setLoading(true);
     setError(null);
     try {
       const [snapshotData, trajectoryData] = await Promise.all([
-        fetchPnLSnapshot(valuationDate),
+        fetchPnLSnapshot(valuationDate, isManualRefresh),
         fetchEquityCurve(valuationDate, selectedAssetClass, searchQuery),
       ]);
       setPnlData(snapshotData || []);
@@ -196,7 +197,7 @@ export default function PnLConsole({ isActive }) {
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold tracking-wide text-slate-900">Positions & P&L Console</h1>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">Mark-to-Market ledger & yield attribution</p>
+              <p className="text-xs text-slate-500 mt-0.5">Mark-to-Market P&L with yield attribution</p>
             </div>
           </div>
 
@@ -215,7 +216,7 @@ export default function PnLConsole({ isActive }) {
               className="bg-slate-50 border border-slate-200 text-slate-900 text-xs font-mono font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
             />
             <button
-              onClick={loadPnLData}
+              onClick={() => loadPnLData(true)}
               disabled={loading}
               title="Refresh Data"
               className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-lg transition-colors disabled:opacity-50"
@@ -223,6 +224,10 @@ export default function PnLConsole({ isActive }) {
               <RotateCcw className={`h-4 w-4 ${loading ? 'animate-spin text-emerald-600' : ''}`} />
             </button>
           </div>
+          <ExportPnLButton
+              valuationDate={valuationDate}
+              pnlData={pnlData}
+            />
         </div>
 
         {/* Disclaimer Banner */}

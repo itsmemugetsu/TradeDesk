@@ -30,14 +30,14 @@ export const TradeBlotter = ({ isActive }) => {
   const [pageSize, setPageSize] = useState(10);
 
   // Core Data Fetcher
-  const loadTrades = useCallback(async () => {
+  const loadTrades = useCallback(async (isManualRefresh = false) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchTradeBlotter(appliedFilters);
+      const data = await fetchTradeBlotter(appliedFilters, isManualRefresh);
       setTrades(data || []);
       setCurrentPage(1);
-      setHasLoadedOnce(true); // 🟢 FIX 1: Mark as loaded so tab switching uses memory cache
+      setHasLoadedOnce(true); // Mark as loaded so tab switching uses memory cache
     } catch (err) {
       setError(err.message || 'Failed to fetch trades.');
     } finally {
@@ -45,20 +45,20 @@ export const TradeBlotter = ({ isActive }) => {
     }
   }, [appliedFilters]);
 
-  // 🟢 FIX 2: Corrected useEffect logic
+  // Corrected useEffect logic
   // - On App Load: Triggers if isActive is true and hasn't loaded yet.
   // - On Filter Click: Triggers when appliedFilters changes (only if tab is active).
   // - On Tab Switch: Skips execution because hasLoadedOnce is true.
   useEffect(() => {
     if (isActive && !hasLoadedOnce) {
-      loadTrades();
+      loadTrades(false);
     }
   }, [isActive, hasLoadedOnce, loadTrades]);
 
   // Re-fetch when user explicitly submits new filters
   useEffect(() => {
     if (hasLoadedOnce && isActive) {
-      loadTrades();
+      loadTrades(false);
     }
   }, [appliedFilters]);
 
@@ -104,7 +104,7 @@ export const TradeBlotter = ({ isActive }) => {
         
         {/* Re-queries backend for new real-time trades */}
         <button
-          onClick={loadTrades}
+          onClick={() => loadTrades(true)}
           disabled={loading}
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-500 transition-colors disabled:opacity-50 cursor-pointer"
         >
