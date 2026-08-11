@@ -1,42 +1,33 @@
-class ApiCache {
-  constructor() {
-    this.cache = new Map();
-  }
+export function createCache(defaultTtl = 5 * 60 * 1000) {
+  const cache = new Map(); // Encapsulated in closure
 
-  /**
-   * Get cached data if it exists and hasn't expired.
-   */
-  get(key) {
-    const cached = this.cache.get(key);
-    if (!cached) return null;
+  return {
+    get(key) {
+      const cached = cache.get(key);
+      if (!cached) return null;
 
-    // Check if cache has expired
-    if (Date.now() > cached.expiry) {
-      this.cache.delete(key);
-      return null;
+      if (Date.now() > cached.expiry) {
+        cache.delete(key);
+        return null;
+      }
+      return cached.data;
+    },
+
+    set(key, data, ttlMs = defaultTtl) {
+      cache.set(key, {
+        data,
+        expiry: Date.now() + ttlMs,
+      });
+    },
+
+    clear(key = null) {
+      if (key) {
+        cache.delete(key);
+      } else {
+        cache.clear();
+      }
     }
-
-    return cached.data;
-  }
-
-  //get cached data
-  set(key, data, ttlMs = 5 * 60 * 1000) {
-    this.cache.set(key, {
-      data,
-      expiry: Date.now() + ttlMs,
-    });
-  }
-
-  /**
-   * Invalidate a single key or clear the entire cache.
-   */
-  clear(key = null) {
-    if (key) {
-      this.cache.delete(key);
-    } else {
-      this.cache.clear();
-    }
-  }
+  };
 }
 
-export const apiCache = new ApiCache();
+export const apiCache = createCache();
