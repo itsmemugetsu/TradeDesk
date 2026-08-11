@@ -270,9 +270,16 @@ export const TradeBlotter = ({ isActive }) => {
                         <div className="font-semibold text-sm text-slate-900">{trade.securityID}</div>
                         <div className="text-[10px] text-slate-500">{trade.securityName}</div>
                       </td>
-                      <td className="py-3 px-4">
-                        <span className="inline-block px-2 py-1 text-[13px] font-medium text-slate-600 bg-slate-100 border border-slate-200 rounded">
-                          {trade.assetClass}
+                      <td className="py-3 px-4">  
+                          <span className={`inline-flex items-center px-2.5 py-1 text-[12px] font-bold rounded-md border ${
+                            trade.assetClass === 'Bond'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : trade.assetClass === 'Equity'
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-purple-50 text-purple-700 border-purple-200'
+                          }`}
+                        >  
+                        {trade.assetClass}
                         </span>
                       </td>
                       <td className="py-3 px-4">

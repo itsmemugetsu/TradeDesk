@@ -424,15 +424,15 @@ export default function PnLConsole({ isActive }) {
                           isBond ? 'bg-amber-50/40' : ''
                         }`}
                       >
-                        <td className="py-3.5 px-4 font-mono font-bold text-slate-900 tracking-wide">
+                        <td className="py-3.5 px-4 font-mono text-sm font-bold text-slate-900 tracking-wide">
                           {row.securityId}
                         </td>
-                        <td className="py-3.5 px-4 text-slate-700 font-medium">
+                        <td className="py-3.5 px-4  text-[12px] text-slate-700 font-medium">
                           {row.securityName || row.securityId}
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="relative group/tooltip inline-block">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-md border ${
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[12px] font-semibold rounded-md border ${
                               isBond
                                 ? 'bg-amber-50 text-amber-700 border-amber-200'
                                 : assetType === 'Equity'
@@ -440,35 +440,35 @@ export default function PnLConsole({ isActive }) {
                                 : 'bg-purple-50 text-purple-700 border-purple-200'
                             }`}>
                               {assetType}
-                              {isBond && <Info className="h-3 w-3 text-amber-600 cursor-pointer" />}
+                              {isBond }
                             </span>
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 text-right font-mono font-medium text-slate-900">
+                        <td className="py-3.5 px-4 text-[13px] text-center font-mono font-medium text-slate-900">
                           {row.qty.toLocaleString('en-IN')}
                         </td>
-                        <td className="py-3.5 px-4 text-right font-mono text-slate-500">
+                        <td className="py-3.5 px-4 text-[13px] text-center font-mono text-slate-500">
                           ₹{row.wac.toFixed(3)}
                         </td>
-                        <td className="py-3.5 px-4 text-right font-mono text-slate-900 font-medium">
+                        <td className="py-3.5 px-4 text-[13px] text-center font-mono text-slate-900 font-medium">
                           ₹{row.closePrice.toFixed(3)}
                         </td>
-                        <td className={`py-3.5 px-4 text-right font-mono font-medium ${
+                        <td className={`py-3.5 px-4  text-[13px] text-center font-mono font-medium ${
                           row.returnPct >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
                           {row.returnPct >= 0 ? '+' : ''}{row.returnPct.toFixed(3)}%
                         </td>
-                        <td className={`py-3.5 px-4 text-right font-mono font-medium ${
+                        <td className={`py-3.5 px-4  text-[13px] text-center font-mono font-medium ${
                           row.realized >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
                           {formatCurrency(row.realized)}
                         </td>
-                        <td className={`py-3.5 px-4 text-right font-mono font-medium ${
+                        <td className={`py-3.5 px-4  text-[13px] text-center font-mono font-medium ${
                           row.unrealized >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
                           {formatCurrency(row.unrealized)}
                         </td>
-                        <td className={`py-3.5 px-4 text-right font-mono font-bold ${
+                        <td className={`py-3.5 px-4  text-[12px] text-right font-mono font-bold ${
                           row.total >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
                           {formatCurrency(row.total)}
