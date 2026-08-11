@@ -32,7 +32,7 @@ namespace VCMTradingDesk.Controllers
                 {
                     Message = $"Valuation date cannot be earlier than system start date ({systemStartDate:yyyy-MM-dd})."
                 });
-            }
+            }   
 
             try
             {

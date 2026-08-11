@@ -41,7 +41,7 @@ namespace VCMTradingDesk
                 builder.Services.AddTransient<IAssetSummaryRepo, AssetSummaryRepo>();
 
                 builder.Services.AddCors(options => options.AddPolicy(
-                    "CorsPolicy", policy => policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod()));
+                    "CorsPolicy", policy => policy.WithOrigins("http://localhost:5173").AllowAnyHeader().WithMethods("GET")));
 
                 builder.Services.AddEndpointsApiExplorer();
                 builder.Services.AddSwaggerGen();
