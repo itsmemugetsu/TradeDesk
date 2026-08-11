@@ -58,6 +58,7 @@ namespace VCMTradingDesk
                     app.UseSwaggerUI();
                 }
 
+                app.UseStaticFiles();  ///files are publicily downloadable
                 app.UseCors("CorsPolicy");
                 app.UseHttpsRedirection();
                 app.UseAuthorization();

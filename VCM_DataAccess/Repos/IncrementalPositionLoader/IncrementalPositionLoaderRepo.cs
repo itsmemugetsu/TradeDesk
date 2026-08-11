@@ -1,10 +1,11 @@
 ﻿using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Globalization;
 using VCM_DataAccess.DataAccess;
-using VCM_Models.Models;
-using VCM_Models.DTOs.PnLCalculationEngine;
 using VCM_DataAccess.Repos.PnLCalculatorEngine;
+using VCM_Models.DTOs.PnLCalculationEngine;
+using VCM_Models.Models;
 
 namespace VCM_DataAccess.Repos.IncrementalPositionLoader
 {
@@ -48,6 +49,7 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
 
             if (existingSnapshots.Any())
             {
+                await EnsureCsvExportExistsAsync();
                 return existingSnapshots;
             }
 
@@ -72,7 +74,7 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
             DateOnly minDate = datesToProcess.First();
             DateOnly maxDate = datesToProcess.Last();
 
-            // Get ALL trades for date range in 1 query
+            // Get ALL trades for date range    
             var allTradesByDate = (await _dbContext.Trades
                 .AsNoTracking()
                 .Where(t => t.TradeDate >= minDate && t.TradeDate <= maxDate)
@@ -82,7 +84,7 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
                 .GroupBy(t => t.TradeDate)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            // Get ALL prices for date range in 1 query 
+            // Get ALL prices for date range 
             var allPricesLookup = await _dbContext.EodPrices
                 .AsNoTracking()
                 .Where(p => p.PriceDate >= minDate && p.PriceDate <= maxDate)
@@ -172,6 +174,8 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
             // Bulk Persist to DB using TVP Stored Procedure
             await SaveSnapshotsBatchViaTvpAsync(allNewSnapshots);
 
+            //saving the snapshots to file for easy access via ui
+            await EnsureCsvExportExistsAsync(allNewSnapshots);
             // Return targetDate snapshots
             return allNewSnapshots
                 .Where(s => s.ValuationDate == targetDate)
@@ -215,28 +219,28 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
             );
         }
         public async Task<List<PnLTrajectoryPointDto>> GetEquityCurveTrajectoryAsync(
-    DateOnly asOfDate,
-    string? assetClass = null,
-    string? securityId = null)
-        {
-            try
+            DateOnly asOfDate,
+            string? assetClass = null,
+            string? securityId = null)
+            {
+               try
             {
                 var startDate = new DateOnly(2026, 2, 2);
 
-                // Base Query joining EOD_Snapshots with Securities table
+                //query to join via linq
                 var query = from snap in _dbContext.EodSnapshots.AsNoTracking()
                             join sec in _dbContext.Securities.AsNoTracking()
                             on snap.SecurityId equals sec.SecurityId
                             where snap.ValuationDate >= startDate && snap.ValuationDate <= asOfDate
                             select new { snap, sec };
 
-                // Apply Asset Class Filter
+                //asset class filter
                 if (!string.IsNullOrWhiteSpace(assetClass) && assetClass.ToUpper() != "ALL")
                 {
                     query = query.Where(x => x.sec.AssetClass.ToUpper() == assetClass.ToUpper());
                 }
 
-                // Apply Security ID / Search Filter
+                //search filter
                 if (!string.IsNullOrWhiteSpace(securityId) && securityId.ToUpper() != "ALL")
                 {
                     var search = securityId.Trim().ToLower();
@@ -244,7 +248,6 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
                                              x.sec.SecurityName.ToLower().Contains(search));
                 }
 
-                // Aggregate daily totals for the filtered scope
                 return await query
                     .GroupBy(x => x.snap.ValuationDate)
                     .Select(g => new PnLTrajectoryPointDto
@@ -262,5 +265,76 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
                 throw new Exception($"Failed to fetch equity curve trajectory: {ex.Message}", ex);
             }
         }
-    }
+
+        private async Task EnsureCsvExportExistsAsync(List<EodSnapshotRecordDto>? snapshotsToWrite = null)
+            {
+            try
+            {
+                string folderPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "exports");
+                string filePath = Path.Combine(folderPath, "PnL_Snapshots_2Feb_31Mar.csv");
+
+                // If file already exists and no new snapshots were passed, do nothing
+                if (File.Exists(filePath) && (snapshotsToWrite == null || !snapshotsToWrite.Any()))
+                {
+                    return;
+                }
+
+                //If no snapshots were passed, fetch all historical records from the DB
+                if (snapshotsToWrite == null || !snapshotsToWrite.Any())
+                {
+                    snapshotsToWrite = await (from s in _dbContext.EodSnapshots.AsNoTracking()
+                                              join sec in _dbContext.Securities.AsNoTracking() on s.SecurityId equals sec.SecurityId
+                                              where s.ValuationDate >= new DateOnly(2026, 2, 2) && s.ValuationDate <= new DateOnly(2026, 3, 31)
+                                              select new EodSnapshotRecordDto
+                                              {
+                                                  ValuationDate = s.ValuationDate,
+                                                  SecurityId = s.SecurityId,
+                                                  SecurityName = sec.SecurityName ?? string.Empty,
+                                                  AssetClass = sec.AssetClass ?? string.Empty,
+                                                  NetQuantity = s.NetQuantity,
+                                                  WeightedAvgCost = s.WeightedAvgCost,
+                                                  CumulativeRealizedPnL = s.RealizedPnL,
+                                                  UnrealizedPnL = s.UnrealizedPnL,
+                                                  TotalPnL = s.TotalPnL,
+                                                  ClosePrice = s.ClosePrice
+                                              }).ToListAsync();
+                }
+
+                if (!snapshotsToWrite.Any()) return;
+
+                if (!Directory.Exists(folderPath))
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
+
+                //Write CSV to disk
+                using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+                using var writer = new StreamWriter(fileStream, System.Text.Encoding.UTF8);
+
+                await writer.WriteLineAsync("ValuationDate,SecurityId,SecurityName,AssetClass,NetQuantity,WeightedAvgCost,RealizedPnL,UnrealizedPnL,TotalPnL,ClosePrice");
+
+                foreach (var item in snapshotsToWrite.OrderBy(s => s.ValuationDate).ThenBy(s => s.SecurityId))
+                {
+                    string secName = $"\"{item.SecurityName?.Replace("\"", "\"\"") ?? string.Empty}\"";
+                    string assetClass = $"\"{item.AssetClass?.Replace("\"", "\"\"") ?? string.Empty}\"";
+
+                    string line = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "{0},{1},{2},{3},{4},{5:F4},{6:F4},{7:F4},{8:F4},{9:F4}",
+                        item.ValuationDate, item.SecurityId, secName, assetClass,
+                        item.NetQuantity, item.WeightedAvgCost, item.CumulativeRealizedPnL,
+                        item.UnrealizedPnL, item.TotalPnL, item.ClosePrice
+                    );
+
+                    await writer.WriteLineAsync(line);
+                }
+
+                await writer.FlushAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CSV Export Warning]: {ex.Message}");
+            }
+        }
+        }
 }
