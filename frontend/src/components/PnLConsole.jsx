@@ -190,9 +190,9 @@ export default function PnLConsole({ isActive }) {
         {/* Top Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-600">
+            {/* <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-600">
               <Wallet className="h-6 w-6" />
-            </div>
+            </div> */}
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold tracking-wide text-slate-900">Positions & P&L Console</h1>
@@ -203,7 +203,7 @@ export default function PnLConsole({ isActive }) {
 
           {/* Valuation Date Picker Controls */}
           <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-sm rounded-xl p-1.5">
-            <div className="flex items-center gap-2 px-3 text-slate-500 text-xs">
+            <div className="flex items-center gap-2 px-3 py-1.5 text-slate-500 text-xs">
               <Calendar className="h-4 w-4 text-emerald-600" />
               <span className="font-medium">Valuation Date</span>
             </div>
@@ -215,6 +215,13 @@ export default function PnLConsole({ isActive }) {
               onChange={(e) => setValuationDate(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-900 text-xs font-mono font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
             />
+            
+          
+          <ExportPnLButton
+              valuationDate={valuationDate}
+              pnlData={pnlData}
+            />
+
             <button
               onClick={() => loadPnLData(true)}
               disabled={loading}
@@ -223,11 +230,7 @@ export default function PnLConsole({ isActive }) {
             >
               <RotateCcw className={`h-4 w-4 ${loading ? 'animate-spin text-emerald-600' : ''}`} />
             </button>
-          </div>
-          <ExportPnLButton
-              valuationDate={valuationDate}
-              pnlData={pnlData}
-            />
+            </div>
         </div>
 
         {/* Disclaimer Banner */}

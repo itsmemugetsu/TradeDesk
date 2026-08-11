@@ -93,9 +93,9 @@ export default function SecuritiesView({ isActive }) {
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 shadow-xs">
+          {/* <div className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 shadow-xs">
             <ShieldCheck className="h-6 w-6 text-emerald-900" />
-          </div>
+          </div> */}
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
               Asset Liquidity & Desk Summary
