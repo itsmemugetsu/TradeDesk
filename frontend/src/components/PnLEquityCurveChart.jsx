@@ -197,7 +197,7 @@ export default function PnLEquityCurveChart({ data, valuationDate, activeAssetCl
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-              Cumulative P&L Trajectory
+              Overall P&L Trajectory
             </h2>
             <span
               className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${
@@ -214,7 +214,7 @@ export default function PnLEquityCurveChart({ data, valuationDate, activeAssetCl
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            History Range:{' '}
+            History :{' '}
             <span className="text-slate-700 font-medium">Feb 02, 2026</span> →{' '}
             <span className="text-emerald-600 font-medium">{valuationDate}</span>
             {activeAssetClass && activeAssetClass !== 'ALL' && (

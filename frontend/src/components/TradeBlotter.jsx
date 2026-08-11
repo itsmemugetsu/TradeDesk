@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo ,useCallback } from 'react';
 import { fetchTradeBlotter } from '../services/tradeblotterapi';
 import { ChevronLeft, ChevronRight, Filter, RotateCcw, Search, ArrowUpDown, Loader2, TrendingUp, TrendingDown, CalendarX, AlertCircle } from 'lucide-react';
 
@@ -14,6 +14,15 @@ const Initial_Filters = {
 const MIN_DATE = '2026-02-02';
 
 export const TradeBlotter = ({ isActive }) => {
+
+    const todayDate = useMemo(() => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }, []);
+
   // Separate Draft Inputs from applied filters
   const [draftFilters, setDraftFilters] = useState(Initial_Filters);
   const [appliedFilters, setAppliedFilters] = useState(Initial_Filters);
@@ -32,7 +41,7 @@ export const TradeBlotter = ({ isActive }) => {
   const loadTrades = useCallback(async (isManualRefresh = false) => {
     setError(null);
 
-    // 🟢 1. Validate Date Range before making network requests
+    // Validate Date Range before making network requests
     if (appliedFilters.startDate && appliedFilters.endDate && appliedFilters.startDate > appliedFilters.endDate) {
       setError('Start Date cannot be after End Date. Please select a valid date range.');
       setTrades([]);
@@ -184,6 +193,7 @@ export const TradeBlotter = ({ isActive }) => {
               type="date"
               name="startDate"
               min={MIN_DATE}
+              max={todayDate}
               value={draftFilters.startDate}
               onChange={handleInputChange}
               className="w-full h-9 px-3 py-1 bg-white border border-slate-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
@@ -196,6 +206,7 @@ export const TradeBlotter = ({ isActive }) => {
               type="date"
               name="endDate"
               min={MIN_DATE}
+              max={todayDate}
               value={draftFilters.endDate}
               onChange={handleInputChange}
               className="w-full h-9 px-3 py-1 bg-white border border-slate-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900"

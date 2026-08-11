@@ -3,7 +3,7 @@ import { Search, ShieldCheck, ArrowUpRight, ArrowDownRight, RotateCcw, Loader2, 
 import { fetchSecuritiesSummary } from '../services/securitiesservice';
 
 const MIN_DATE = '2026-02-02';
-const MAX_DATE = '2026-03-31';
+
 
 const formatDate = (dateStr) => {
   if (!dateStr) return 'N/A';
@@ -11,6 +11,15 @@ const formatDate = (dateStr) => {
 };
 
 export default function SecuritiesView({ isActive }) {
+
+    const todayDate = useMemo(() => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }, []);
+    
   const [activityDate, setActivityDate] = useState('2026-03-31');
   const [securities, setSecurities] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -116,19 +125,19 @@ export default function SecuritiesView({ isActive }) {
           <input
             type="date"
             min={MIN_DATE}
-            max={MAX_DATE}
+            max={todayDate}
             value={activityDate}
             onChange={(e) => setActivityDate(e.target.value)}
             className="bg-slate-50 border border-slate-300 text-slate-900 text-xs font-mono font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-800 cursor-pointer"
           />
-          <button
+          {/* <button
             onClick={() => loadSecurities(true)}
             disabled={loading}
             title="Refresh Summary"
             className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
           >
             <RotateCcw className={`h-4 w-4 ${loading ? 'animate-spin text-emerald-900' : ''}`} />
-          </button>
+          </button> */}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
-  Search, RotateCcw, Info, Calendar, Wallet, ArrowUpRight, ArrowDownRight,
+  Search, RotateCcw, Info, Calendar, ArrowUpRight, ArrowDownRight,
   Loader2, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown, X
 } from 'lucide-react';
 import { fetchPnLSnapshot } from '../services/pnlservice';
@@ -9,18 +9,28 @@ import PnLEquityCurveChart from './PnLEquityCurveChart';
 import ExportPnLButton from './ExportPnLButton';
 
 export default function PnLConsole({ isActive }) {
+
+  const todayDate = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
   const [valuationDate, setValuationDate] = useState('2026-03-31');
   const [fetchedValuationDate, setFetchedValuationDate] = useState('2026-03-31');
 
-  // Track if initial load has occurred across renders using useRef
+  // Tracks initial mount state & in-memory trajectory cache
   const hasLoadedRef = useRef(false);
+  const trajectoryCacheRef = useRef(new Map());
 
   const [pnlData, setPnlData] = useState([]);
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-
+  // Search Input State
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -29,7 +39,7 @@ export default function PnLConsole({ isActive }) {
   const [sortDirection, setSortDirection] = useState('DESC');
   const [quickFilter, setQuickFilter] = useState('ALL');
 
-  // Debounce Effect: Updates debouncedSearch 500ms after user stops typing
+  // Debounce Effect (500ms)
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchInput.trim());
@@ -38,7 +48,6 @@ export default function PnLConsole({ isActive }) {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Clear Search
   const handleClearSearch = () => {
     setSearchInput('');
     setDebouncedSearch('');
@@ -52,47 +61,90 @@ export default function PnLConsole({ isActive }) {
     return 'Other';
   };
 
-  // Core Data Fetcher (Uses debouncedSearch)
-  const loadPnLData = useCallback(async (isManualRefresh = false) => {
+  // 🟢 FIX FOR FLAW #1: Only return a security ID if it EXACTLY matches a valid ticker in pnlData
+  const validSecurityId = useMemo(() => {
+    if (!debouncedSearch) return '';
+    const match = pnlData.find(
+      (item) => item.securityId?.toLowerCase() === debouncedSearch.toLowerCase()
+    );
+    return match ? match.securityId : '';
+  }, [pnlData, debouncedSearch]);
+
+  // 1. Fetch PnL Snapshot
+  const loadSnapshotData = useCallback(async (targetDate, forceRefresh = false) => {
+    try {
+      const snapshot = await fetchPnLSnapshot(targetDate, forceRefresh);
+      setPnlData(snapshot || []);
+      setFetchedValuationDate(targetDate);
+    } catch (err) {
+      throw new Error(err.response?.data?.message || err.message || 'Failed to fetch PnL snapshot.');
+    }
+  }, []);
+
+  // Trajectory Fetcher with In-Memory Caching per Asset Class
+  const loadTrajectoryData = useCallback(async (targetDate, assetClass, security, forceRefresh = false) => {
+    const cacheKey = `${targetDate}_${assetClass}_${security}`;
+
+    // Serve from component cache if available and not forced refresh
+    if (!forceRefresh && trajectoryCacheRef.current.has(cacheKey)) {
+      setChartData(trajectoryCacheRef.current.get(cacheKey));
+      return;
+    }
+
+    try {
+      const trajectory = await fetchEquityCurve(targetDate, assetClass, security, forceRefresh);
+      trajectoryCacheRef.current.set(cacheKey, trajectory || []);
+      setChartData(trajectory || []);
+    } catch (err) {
+      throw new Error(err.response?.data?.message || err.message || 'Failed to fetch trajectory curve.');
+    }
+  }, []);
+
+  // Master Orchestrator (Used for initial mount & manual forced refresh)
+  const handleFullLoad = useCallback(async (isManualRefresh = false) => {
     setLoading(true);
     setError(null);
+
+    if (isManualRefresh) {
+      trajectoryCacheRef.current.clear(); // Invalidate trajectory cache on explicit refresh
+    }
+
     try {
-      const [snapshotData, trajectoryData] = await Promise.all([
-        fetchPnLSnapshot(valuationDate, isManualRefresh),
-        fetchEquityCurve(valuationDate, selectedAssetClass, debouncedSearch),
+      await Promise.all([
+        loadSnapshotData(valuationDate, isManualRefresh),
+        loadTrajectoryData(valuationDate, selectedAssetClass, validSecurityId, isManualRefresh)
       ]);
-      setPnlData(snapshotData || []);
-      setChartData(trajectoryData || []);
-      setFetchedValuationDate(valuationDate);
-      hasLoadedRef.current = true; 
+      hasLoadedRef.current = true;
     } catch (err) {
-      const errorMessage =
-        err.response?.data?.message ||
-        err.message ||
-        'Failed to fetch PnL Console data.';
-      setError(errorMessage);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [valuationDate, selectedAssetClass, debouncedSearch]);
+  }, [valuationDate, selectedAssetClass, validSecurityId, loadSnapshotData, loadTrajectoryData]);
 
-  // Initial load when first tab becomes active
+  // Handle Tab Activation and Date Changes
   useEffect(() => {
-    if (isActive && !hasLoadedRef.current) {
-      loadPnLData();
-    }
-  }, [isActive, loadPnLData]);
+    if (!isActive) return;
 
-  // 🟢 3. Re-fetch automatically when valuationDate, asset class, or debouncedSearch changes
+    if (!hasLoadedRef.current) {
+      handleFullLoad(false);
+    }
+  }, [isActive, handleFullLoad]);
+
+  // Handle Date Picker Changes
   useEffect(() => {
     if (!isActive || !hasLoadedRef.current) return;
-    loadPnLData();
-  }, [valuationDate, selectedAssetClass, debouncedSearch]);
+    handleFullLoad(false);
+  }, [valuationDate]);
+
+  // Uses Cached Trajectory Data where available
+  useEffect(() => {
+    if (!isActive || !hasLoadedRef.current) return;
+    loadTrajectoryData(valuationDate, selectedAssetClass, validSecurityId, false);
+  }, [selectedAssetClass, validSecurityId, valuationDate, loadTrajectoryData, isActive]);
 
   const weekendDisclaimer = useMemo(() => {
-    if (loading || fetchedValuationDate !== valuationDate) {
-      return null;
-    }
+    if (loading || fetchedValuationDate !== valuationDate) return null;
 
     if (pnlData.length > 0) {
       const returnedDate = pnlData[0].valuationDate;
@@ -166,13 +218,11 @@ export default function PnLConsole({ isActive }) {
 
   const totals = useMemo(() => {
     return filteredData.reduce(
-      (acc, item) => {
-        return {
-          realized: acc.realized + item.realized,
-          unrealized: acc.unrealized + item.unrealized,
-          total: acc.total + item.total,
-        };
-      },
+      (acc, item) => ({
+        realized: acc.realized + item.realized,
+        unrealized: acc.unrealized + item.unrealized,
+        total: acc.total + item.total,
+      }),
       { realized: 0, unrealized: 0, total: 0 }
     );
   }, [filteredData]);
@@ -201,48 +251,33 @@ export default function PnLConsole({ isActive }) {
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Top Header */}
+        {/* Header Controls */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
-          <div className="flex items-center gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-wide text-slate-900">Positions & P&L Console</h1>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">Mark-to-Market P&L with yield attribution</p>
-            </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-wide text-slate-900">Positions & P&L Console</h1>
+            <p className="text-xs text-slate-500 mt-0.5">Mark-to-Market P&L with yield attribution</p>
           </div>
 
-          {/* Valuation Date Picker Controls */}
           <div className="flex items-center gap-2 bg-white border border-slate-200 shadow-sm rounded-xl p-1.5">
             <div className="flex items-center gap-2 px-3 py-1.5 text-slate-500 text-xs">
               <Calendar className="h-4 w-4 text-emerald-600" />
               <span className="font-medium">Valuation Date</span>
             </div>
+            
             <input
               type="date"
               value={valuationDate}
               min="2026-02-02"
+              max={todayDate}
               onChange={(e) => setValuationDate(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-900 text-xs font-mono font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
             />
             
-            <ExportPnLButton
-              valuationDate={valuationDate}
-              pnlData={pnlData}
-            />
+            <ExportPnLButton valuationDate={valuationDate} pnlData={pnlData} />
 
-            <button
-              onClick={() => loadPnLData(true)}
-              disabled={loading}
-              title="Refresh Data"
-              className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-lg transition-colors disabled:opacity-50"
-            >
-              <RotateCcw className={`h-4 w-4 ${loading ? 'animate-spin text-emerald-600' : ''}`} />
-            </button>
           </div>
         </div>
 
-        {/* Disclaimer Banner */}
         {weekendDisclaimer && (
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs flex items-center gap-2 shadow-sm">
             <Info className="h-4 w-4 text-amber-600 shrink-0" />
@@ -250,15 +285,14 @@ export default function PnLConsole({ isActive }) {
           </div>
         )}
 
-        {/* Dynamic Trajectory Chart */}
         <PnLEquityCurveChart
           data={chartData}
           valuationDate={valuationDate}
           activeAssetClass={selectedAssetClass}
-          activeSecurity={debouncedSearch}
+          activeSecurity={validSecurityId}
         />
 
-        {/* Summary Cards */}
+        {/* Summary Metric Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-4">
             <div className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Realized P&L</div>
@@ -288,12 +322,11 @@ export default function PnLConsole({ isActive }) {
           </div>
         </div>
 
-        {/* Controls Bar */}
+        {/* Filter Controls Bar */}
         <div className="space-y-3 bg-white border border-slate-200 shadow-sm rounded-xl p-3">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="relative w-full sm:w-80">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-             
               <input
                 type="text"
                 placeholder="Search ticker, security name..."
@@ -303,6 +336,7 @@ export default function PnLConsole({ isActive }) {
               />
               {searchInput && (
                 <button
+                  type="button"
                   onClick={handleClearSearch}
                   className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full cursor-pointer"
                   title="Clear search"
@@ -311,10 +345,12 @@ export default function PnLConsole({ isActive }) {
                 </button>
               )}
             </div>
+
             <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 w-full sm:w-auto">
               {['ALL', 'Equity', 'Bond', 'ETF'].map((asset) => (
                 <button
                   key={asset}
+                  type="button"
                   onClick={() => setSelectedAssetClass(asset)}
                   className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
                     selectedAssetClass === asset
@@ -328,25 +364,12 @@ export default function PnLConsole({ isActive }) {
             </div>
           </div>
 
-          {/* Strategy View Filters + Floating Tooltips */}
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
             <span className="text-[11px] text-slate-500 font-medium mr-1 uppercase tracking-wider shrink-0">Strategy View:</span>
             {[
-              { 
-                id: 'ALL', 
-                label: 'Show All', 
-                tooltip: 'Display all portfolio positions regardless of profit or loss' 
-              },
-              { 
-                id: 'GAINERS', 
-                label: 'Top Gainers', 
-                tooltip: 'Show open positions currently generating profit (Unrealized P&L > 0)' 
-              },
-              { 
-                id: 'LOSERS', 
-                label: 'Underperformers', 
-                tooltip: 'Show open positions currently generating a loss (Unrealized P&L < 0)' 
-              },
+              { id: 'ALL', label: 'Show All', tooltip: 'Display all portfolio positions regardless of profit or loss' },
+              { id: 'GAINERS', label: 'Top Gainers', tooltip: 'Show open positions currently generating profit (Unrealized P&L > 0)' },
+              { id: 'LOSERS', label: 'Underperformers', tooltip: 'Show open positions currently generating a loss (Unrealized P&L < 0)' },
             ].map((preset) => (
               <div key={preset.id} className="relative group shrink-0">
                 <button
@@ -361,7 +384,6 @@ export default function PnLConsole({ isActive }) {
                   {preset.label}
                 </button>
 
-                {/* Floating Tooltip Container */}
                 <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:flex flex-col items-center z-30 pointer-events-none">
                   <div className="bg-slate-900 text-slate-100 text-[10px] font-medium py-1 px-2.5 rounded-md shadow-lg whitespace-nowrap">
                     {preset.tooltip}
@@ -379,7 +401,7 @@ export default function PnLConsole({ isActive }) {
           </div>
         )}
 
-        {/* Main Terminal Table */}
+        {/* Positions Matrix Table */}
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -463,9 +485,7 @@ export default function PnLConsole({ isActive }) {
                     return (
                       <tr
                         key={row.securityId}
-                        className={`hover:bg-slate-50 transition-colors ${
-                          isBond ? 'bg-amber-50/40' : ''
-                        }`}
+                        className={`hover:bg-slate-50 transition-colors ${isBond ? 'bg-amber-50/40' : ''}`}
                       >
                         <td className="py-3.5 px-4 font-mono text-sm font-bold text-slate-900 tracking-wide">
                           {row.securityId}
@@ -474,17 +494,15 @@ export default function PnLConsole({ isActive }) {
                           {row.securityName || row.securityId}
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="relative group/tooltip inline-block">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[12px] font-semibold rounded-md border ${
-                              isBond
-                                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                : assetType === 'Equity'
-                                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                : 'bg-purple-50 text-purple-700 border-purple-200'
-                            }`}>
-                              {assetType}
-                            </span>
-                          </div>
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[12px] font-semibold rounded-md border ${
+                            isBond
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : assetType === 'Equity'
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-purple-50 text-purple-700 border-purple-200'
+                          }`}>
+                            {assetType}
+                          </span>
                         </td>
                         <td className="py-3.5 px-4 text-[13px] text-center font-mono font-medium text-slate-900">
                           {row.qty.toLocaleString('en-IN')}
