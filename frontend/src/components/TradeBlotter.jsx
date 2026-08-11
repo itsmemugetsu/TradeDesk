@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { fetchTradeBlotter } from '../services/tradeblotterapi';
-import { ChevronLeft, ChevronRight, Filter, RotateCcw, Search, ArrowUpDown, Loader2, TrendingUp, TrendingDown, CalendarX } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Filter, RotateCcw, Search, ArrowUpDown, Loader2, TrendingUp, TrendingDown, CalendarX, AlertCircle } from 'lucide-react';
 
 const Initial_Filters = {
   traderId: '',
@@ -12,7 +12,6 @@ const Initial_Filters = {
 };
 
 const MIN_DATE = '2026-02-02';
-const MAX_DATE = '2026-03-31';
 
 export const TradeBlotter = ({ isActive }) => {
   // Separate Draft Inputs from applied filters
@@ -31,31 +30,50 @@ export const TradeBlotter = ({ isActive }) => {
 
   // Core Data Fetcher
   const loadTrades = useCallback(async (isManualRefresh = false) => {
-    setLoading(true);
     setError(null);
+
+    // 🟢 1. Validate Date Range before making network requests
+    if (appliedFilters.startDate && appliedFilters.endDate && appliedFilters.startDate > appliedFilters.endDate) {
+      setError('Start Date cannot be after End Date. Please select a valid date range.');
+      setTrades([]);
+      return;
+    }
+
+    setLoading(true);
     try {
       const data = await fetchTradeBlotter(appliedFilters, isManualRefresh);
-      setTrades(data || []);
+      
+      //  empty results with specific contextual error messages
+      if (!data || data.length === 0) {
+        setTrades([]);
+        if (appliedFilters.traderId && appliedFilters.securityId) {
+          setError(`No trade records found for Trader ID "${appliedFilters.traderId}" and Security ID "${appliedFilters.securityId}".`);
+        } else if (appliedFilters.traderId) {
+          setError(`No trade records found for Trader ID "${appliedFilters.traderId}".`);
+        } else if (appliedFilters.securityId) {
+          setError(`Invalid Security ID "${appliedFilters.securityId}". Please check the ID and try again.`);
+        }
+      } else {
+        setTrades(data);
+      }
+
       setCurrentPage(1);
-      setHasLoadedOnce(true); // Mark as loaded so tab switching uses memory cache
+      setHasLoadedOnce(true);
     } catch (err) {
+      // Catches server HTTP 400/404 messages (e.g. Invalid Security ID)
       setError(err.message || 'Failed to fetch trades.');
+      setTrades([]);
     } finally {
       setLoading(false);
     }
   }, [appliedFilters]);
 
-  // Corrected useEffect logic
-  // - On App Load: Triggers if isActive is true and hasn't loaded yet.
-  // - On Filter Click: Triggers when appliedFilters changes (only if tab is active).
-  // - On Tab Switch: Skips execution because hasLoadedOnce is true.
   useEffect(() => {
     if (isActive && !hasLoadedOnce) {
       loadTrades(false);
     }
   }, [isActive, hasLoadedOnce, loadTrades]);
 
-  // Re-fetch when user explicitly submits new filters
   useEffect(() => {
     if (hasLoadedOnce && isActive) {
       loadTrades(false);
@@ -78,6 +96,7 @@ export const TradeBlotter = ({ isActive }) => {
   const handleReset = () => {
     setDraftFilters(Initial_Filters);
     setAppliedFilters(Initial_Filters);
+    setError(null);
   };
 
   // Sort Toggle
@@ -102,7 +121,6 @@ export const TradeBlotter = ({ isActive }) => {
           <p className="text-sm text-slate-500">Real-time Trades execution and transaction history</p>
         </div>
         
-        {/* Re-queries backend for new real-time trades */}
         <button
           onClick={() => loadTrades(true)}
           disabled={loading}
@@ -166,7 +184,6 @@ export const TradeBlotter = ({ isActive }) => {
               type="date"
               name="startDate"
               min={MIN_DATE}
-              max={MAX_DATE}
               value={draftFilters.startDate}
               onChange={handleInputChange}
               className="w-full h-9 px-3 py-1 bg-white border border-slate-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
@@ -179,7 +196,6 @@ export const TradeBlotter = ({ isActive }) => {
               type="date"
               name="endDate"
               min={MIN_DATE}
-              max={MAX_DATE}
               value={draftFilters.endDate}
               onChange={handleInputChange}
               className="w-full h-9 px-3 py-1 bg-white border border-slate-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
@@ -207,8 +223,9 @@ export const TradeBlotter = ({ isActive }) => {
 
       {/* Error Alert */}
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          {error}
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2 shadow-xs">
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+          <span>{error}</span>
         </div>
       )}
 
@@ -246,9 +263,6 @@ export const TradeBlotter = ({ isActive }) => {
                   <td colSpan={9} className="py-12 text-center text-slate-500">
                     <CalendarX className="h-8 w-8 mx-auto mb-2 text-slate-300" />
                     <p className="font-medium text-slate-700">No trades match the selected criteria.</p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Note: Trading blotter records exist between <strong>Feb 02, 2026</strong> and <strong>Mar 31, 2026</strong>.
-                    </p>
                   </td>
                 </tr>
               ) : (
@@ -271,15 +285,14 @@ export const TradeBlotter = ({ isActive }) => {
                         <div className="text-[10px] text-slate-500">{trade.securityName}</div>
                       </td>
                       <td className="py-3 px-4">  
-                          <span className={`inline-flex items-center px-2.5 py-1 text-[12px] font-bold rounded-md border ${
-                            trade.assetClass === 'Bond'
-                              ? 'bg-amber-50 text-amber-700 border-amber-200'
-                              : trade.assetClass === 'Equity'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : 'bg-purple-50 text-purple-700 border-purple-200'
-                          }`}
-                        >  
-                        {trade.assetClass}
+                        <span className={`inline-flex items-center px-2.5 py-1 text-[12px] font-bold rounded-md border ${
+                          trade.assetClass === 'Bond'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : trade.assetClass === 'Equity'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : 'bg-purple-50 text-purple-700 border-purple-200'
+                        }`}>  
+                          {trade.assetClass}
                         </span>
                       </td>
                       <td className="py-3 px-4">
@@ -298,10 +311,10 @@ export const TradeBlotter = ({ isActive }) => {
                         {trade.quantity?.toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-sm text-slate-700">
-                        ₹{trade.price?.toFixed(3)}
+                        ₹{trade.price?.toFixed(2)}
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-sm font-semibold text-slate-900">
-                        ₹{trade.totalValue?.toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                        ₹{trade.totalValue?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
                   );

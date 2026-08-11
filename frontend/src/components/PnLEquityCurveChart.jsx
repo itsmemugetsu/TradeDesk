@@ -23,6 +23,19 @@ ChartJS.register(
   Filler
 );
 
+Tooltip.positioners.aboveMax = function(elements) {
+  if (!elements || !elements.length) return false;
+
+  // Canvas Y=0 is at the top of the chart, so Math.min gives the top-most line
+  const highestY = Math.min(...elements.map(el => el.element.y));
+  const x = elements[0].element.x;
+
+  return {
+    x: x,
+    y: highestY,
+  };
+};
+
 export default function PnLEquityCurveChart({ data, valuationDate, activeAssetClass, activeSecurity }) {
   const normalizedData = useMemo(() => {
     if (!Array.isArray(data)) return [];
@@ -50,7 +63,7 @@ export default function PnLEquityCurveChart({ data, valuationDate, activeAssetCl
   const chartData = {
     labels: normalizedData.map((d) =>
       d.valuationDate && d.valuationDate.length >= 10
-        ? d.valuationDate.substring(5, 10) // '2026-02-15' -> '02-15'
+        ? d.valuationDate.substring(5, 10)
         : d.valuationDate
     ),
     datasets: [
@@ -89,9 +102,17 @@ export default function PnLEquityCurveChart({ data, valuationDate, activeAssetCl
     ],
   };
 
-    const options = {
+  const options = {
     responsive: true,
     maintainAspectRatio: false,
+    
+    
+    layout: {
+      padding: {
+        top: 35,
+      },
+    },
+
     interaction: {
       mode: 'index',
       intersect: false,
@@ -103,14 +124,12 @@ export default function PnLEquityCurveChart({ data, valuationDate, activeAssetCl
           color: '#475569',
           font: { size: 12 },
           padding: 24, 
-          
-          // Custom label generator to enforce clean solid squares
           generateLabels: (chart) => {
             return chart.data.datasets.map((dataset, i) => ({
               text: dataset.label,
               fillStyle: dataset.borderColor,  
               strokeStyle: 'transparent',      
-              lineWidth: 0,                   
+              lineWidth: 0,                    
               hidden: !chart.isDatasetVisible(i),
               datasetIndex: i,
             }));
@@ -118,11 +137,16 @@ export default function PnLEquityCurveChart({ data, valuationDate, activeAssetCl
         },
       },
       tooltip: {
-        backgroundColor: '#0f172a',
+        position: 'aboveMax', 
+        yAlign: 'bottom',     
+        caretPadding: 12,    
+
+        backgroundColor: '#373a40c8',
         titleColor: '#34d399',
         bodyColor: '#f8fafc',
         padding: 12,
-        boxPadding: 4,
+        boxPadding: 6,
+
         callbacks: {
           title: (tooltipItems) => {
             const index = tooltipItems[0].dataIndex;
@@ -132,8 +156,8 @@ export default function PnLEquityCurveChart({ data, valuationDate, activeAssetCl
             const label = context.dataset.label || '';
             const value = context.parsed.y || 0;
             const formattedVal = Number(value).toLocaleString('en-IN', {
-              minimumFractionDigits: 3,
-              maximumFractionDigits: 3,
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
             });
             return `${label}: ₹${formattedVal}`;
           },
@@ -184,8 +208,8 @@ export default function PnLEquityCurveChart({ data, valuationDate, activeAssetCl
             >
               {isPositive ? '+' : ''}₹
               {latestNetPnL.toLocaleString('en-IN', {
-                minimumFractionDigits: 3,
-                maximumFractionDigits: 3,
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
               })}
             </span>
           </div>

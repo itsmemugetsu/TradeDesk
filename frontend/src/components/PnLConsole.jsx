@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Search, RotateCcw, Info, Calendar, Wallet, ArrowUpRight, ArrowDownRight,
-  Loader2, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown
+  Loader2, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown, X
 } from 'lucide-react';
 import { fetchPnLSnapshot } from '../services/pnlservice';
 import { fetchEquityCurve } from '../services/fetchEquityCurve';
@@ -19,12 +19,30 @@ export default function PnLConsole({ isActive }) {
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedAssetClass, setSelectedAssetClass] = useState('ALL');
 
+
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  const [selectedAssetClass, setSelectedAssetClass] = useState('ALL');
   const [sortColumn, setSortColumn] = useState('unrealized');
   const [sortDirection, setSortDirection] = useState('DESC');
   const [quickFilter, setQuickFilter] = useState('ALL');
+
+  // Debounce Effect: Updates debouncedSearch 500ms after user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Clear Search
+  const handleClearSearch = () => {
+    setSearchInput('');
+    setDebouncedSearch('');
+  };
 
   const resolveAssetClass = (item) => {
     if (item.assetClass) return item.assetClass;
@@ -34,13 +52,14 @@ export default function PnLConsole({ isActive }) {
     return 'Other';
   };
 
+  // Core Data Fetcher (Uses debouncedSearch)
   const loadPnLData = useCallback(async (isManualRefresh = false) => {
     setLoading(true);
     setError(null);
     try {
       const [snapshotData, trajectoryData] = await Promise.all([
         fetchPnLSnapshot(valuationDate, isManualRefresh),
-        fetchEquityCurve(valuationDate, selectedAssetClass, searchQuery),
+        fetchEquityCurve(valuationDate, selectedAssetClass, debouncedSearch),
       ]);
       setPnlData(snapshotData || []);
       setChartData(trajectoryData || []);
@@ -55,7 +74,7 @@ export default function PnLConsole({ isActive }) {
     } finally {
       setLoading(false);
     }
-  }, [valuationDate, selectedAssetClass, searchQuery]);
+  }, [valuationDate, selectedAssetClass, debouncedSearch]);
 
   // Initial load when first tab becomes active
   useEffect(() => {
@@ -64,17 +83,11 @@ export default function PnLConsole({ isActive }) {
     }
   }, [isActive, loadPnLData]);
 
-  // re-fetch only when user changes filters/search/date while viewing the tab
+  // 🟢 3. Re-fetch automatically when valuationDate, asset class, or debouncedSearch changes
   useEffect(() => {
-    // Skip if tab is inactive OR if it hasn't loaded for the first time yet
     if (!isActive || !hasLoadedRef.current) return;
-
-    const timer = setTimeout(() => {
-      loadPnLData();
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [valuationDate, selectedAssetClass, searchQuery]); 
+    loadPnLData();
+  }, [valuationDate, selectedAssetClass, debouncedSearch]);
 
   const weekendDisclaimer = useMemo(() => {
     if (loading || fetchedValuationDate !== valuationDate) {
@@ -121,8 +134,9 @@ export default function PnLConsole({ isActive }) {
         };
       })
       .filter((item) => {
-        const query = searchQuery.toLowerCase();
+        const query = debouncedSearch.toLowerCase();
         const matchesSearch =
+          !query ||
           item.securityId?.toLowerCase().includes(query) ||
           item.securityName?.toLowerCase().includes(query);
 
@@ -148,7 +162,7 @@ export default function PnLConsole({ isActive }) {
         }
         return sortDirection === 'ASC' ? aVal - bVal : bVal - aVal;
       });
-  }, [pnlData, searchQuery, selectedAssetClass, quickFilter, sortColumn, sortDirection]);
+  }, [pnlData, debouncedSearch, selectedAssetClass, quickFilter, sortColumn, sortDirection]);
 
   const totals = useMemo(() => {
     return filteredData.reduce(
@@ -166,8 +180,8 @@ export default function PnLConsole({ isActive }) {
   const formatCurrency = (val) => {
     const isNegative = val < 0;
     const absVal = Math.abs(val || 0).toLocaleString('en-IN', {
-      minimumFractionDigits: 3,
-      maximumFractionDigits: 3
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
     });
     return `${isNegative ? '-' : '+'}₹${absVal}`;
   };
@@ -190,9 +204,6 @@ export default function PnLConsole({ isActive }) {
         {/* Top Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
           <div className="flex items-center gap-3">
-            {/* <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-600">
-              <Wallet className="h-6 w-6" />
-            </div> */}
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold tracking-wide text-slate-900">Positions & P&L Console</h1>
@@ -211,13 +222,11 @@ export default function PnLConsole({ isActive }) {
               type="date"
               value={valuationDate}
               min="2026-02-02"
-              max="2026-03-31"
               onChange={(e) => setValuationDate(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-900 text-xs font-mono font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
             />
             
-          
-          <ExportPnLButton
+            <ExportPnLButton
               valuationDate={valuationDate}
               pnlData={pnlData}
             />
@@ -230,7 +239,7 @@ export default function PnLConsole({ isActive }) {
             >
               <RotateCcw className={`h-4 w-4 ${loading ? 'animate-spin text-emerald-600' : ''}`} />
             </button>
-            </div>
+          </div>
         </div>
 
         {/* Disclaimer Banner */}
@@ -246,7 +255,7 @@ export default function PnLConsole({ isActive }) {
           data={chartData}
           valuationDate={valuationDate}
           activeAssetClass={selectedAssetClass}
-          activeSecurity={searchQuery}
+          activeSecurity={debouncedSearch}
         />
 
         {/* Summary Cards */}
@@ -284,20 +293,30 @@ export default function PnLConsole({ isActive }) {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="relative w-full sm:w-80">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+             
               <input
                 type="text"
                 placeholder="Search ticker, security name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-xs rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:border-emerald-500 placeholder-slate-400"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-xs rounded-lg pl-9 pr-8 py-2 focus:outline-none focus:border-emerald-500 placeholder-slate-400"
               />
+              {searchInput && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
             <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-1 w-full sm:w-auto">
               {['ALL', 'Equity', 'Bond', 'ETF'].map((asset) => (
                 <button
                   key={asset}
                   onClick={() => setSelectedAssetClass(asset)}
-                  className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
                     selectedAssetClass === asset
                       ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
                       : 'text-slate-600 hover:text-slate-900'
@@ -308,24 +327,48 @@ export default function PnLConsole({ isActive }) {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto pt-2 border-t border-slate-100">
+
+          {/* Strategy View Filters + Floating Tooltips */}
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
             <span className="text-[11px] text-slate-500 font-medium mr-1 uppercase tracking-wider shrink-0">Strategy View:</span>
             {[
-              { id: 'ALL', label: 'Show All' },
-              { id: 'GAINERS', label: 'Top Gainers' },
-              { id: 'LOSERS', label: 'Underperformers' },
+              { 
+                id: 'ALL', 
+                label: 'Show All', 
+                tooltip: 'Display all portfolio positions regardless of profit or loss' 
+              },
+              { 
+                id: 'GAINERS', 
+                label: 'Top Gainers', 
+                tooltip: 'Show open positions currently generating profit (Unrealized P&L > 0)' 
+              },
+              { 
+                id: 'LOSERS', 
+                label: 'Underperformers', 
+                tooltip: 'Show open positions currently generating a loss (Unrealized P&L < 0)' 
+              },
             ].map((preset) => (
-              <button
-                key={preset.id}
-                onClick={() => setQuickFilter(preset.id)}
-                className={`px-3 py-1 text-xs font-medium rounded-lg border transition-all whitespace-nowrap ${
-                  quickFilter === preset.id
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold'
-                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                {preset.label}
-              </button>
+              <div key={preset.id} className="relative group shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setQuickFilter(preset.id)}
+                  className={`px-3 py-1 text-xs font-medium rounded-lg border transition-all whitespace-nowrap cursor-pointer ${
+                    quickFilter === preset.id
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+
+                {/* Floating Tooltip Container */}
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:flex flex-col items-center z-30 pointer-events-none">
+                  <div className="bg-slate-900 text-slate-100 text-[10px] font-medium py-1 px-2.5 rounded-md shadow-lg whitespace-nowrap">
+                    {preset.tooltip}
+                  </div>
+                  <div className="w-2 h-2 -mt-1 bg-slate-900 rotate-45"></div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -427,7 +470,7 @@ export default function PnLConsole({ isActive }) {
                         <td className="py-3.5 px-4 font-mono text-sm font-bold text-slate-900 tracking-wide">
                           {row.securityId}
                         </td>
-                        <td className="py-3.5 px-4  text-[12px] text-slate-700 font-medium">
+                        <td className="py-3.5 px-4 text-[12px] text-slate-700 font-bold">
                           {row.securityName || row.securityId}
                         </td>
                         <td className="py-3.5 px-4">
@@ -440,7 +483,6 @@ export default function PnLConsole({ isActive }) {
                                 : 'bg-purple-50 text-purple-700 border-purple-200'
                             }`}>
                               {assetType}
-                              {isBond }
                             </span>
                           </div>
                         </td>
@@ -448,27 +490,27 @@ export default function PnLConsole({ isActive }) {
                           {row.qty.toLocaleString('en-IN')}
                         </td>
                         <td className="py-3.5 px-4 text-[13px] text-center font-mono text-slate-500">
-                          ₹{row.wac.toFixed(3)}
+                          ₹{row.wac.toFixed(2)}
                         </td>
                         <td className="py-3.5 px-4 text-[13px] text-center font-mono text-slate-900 font-medium">
-                          ₹{row.closePrice.toFixed(3)}
+                          ₹{row.closePrice.toFixed(2)}
                         </td>
-                        <td className={`py-3.5 px-4  text-[13px] text-center font-mono font-medium ${
+                        <td className={`py-3.5 px-4 text-[13px] text-center font-mono font-medium ${
                           row.returnPct >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
-                          {row.returnPct >= 0 ? '+' : ''}{row.returnPct.toFixed(3)}%
+                          {row.returnPct >= 0 ? '+' : ''}{row.returnPct.toFixed(2)}%
                         </td>
-                        <td className={`py-3.5 px-4  text-[13px] text-center font-mono font-medium ${
+                        <td className={`py-3.5 px-4 text-[13px] text-center font-mono font-medium ${
                           row.realized >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
                           {formatCurrency(row.realized)}
                         </td>
-                        <td className={`py-3.5 px-4  text-[13px] text-center font-mono font-medium ${
+                        <td className={`py-3.5 px-4 text-[13px] text-center font-mono font-medium ${
                           row.unrealized >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
                           {formatCurrency(row.unrealized)}
                         </td>
-                        <td className={`py-3.5 px-4  text-[12px] text-right font-mono font-bold ${
+                        <td className={`py-3.5 px-4 text-[12px] text-right font-mono font-bold ${
                           row.total >= 0 ? 'text-emerald-600' : 'text-rose-600'
                         }`}>
                           {formatCurrency(row.total)}
