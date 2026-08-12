@@ -32,17 +32,18 @@ namespace VCMTradingDesk.Controllers
                 {
                     Message = $"Valuation date cannot be earlier than system start date ({systemStartDate:yyyy-MM-dd})."
                 });
-            }   
+            }
 
             try
             {
-                var result = await _positionLoader.GetOrBackfillSnapshotsAsync(dateToQuery);
+                //Fast lookup for pre-computed background snapshots
+                var result = await _positionLoader.GetSnapshotsByDateAsync(dateToQuery);
                 return Ok(result ?? new List<EodSnapshotRecordDto>());
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error occurred while computing PnL snapshots for ValuationDate: {ValuationDate}", dateToQuery);
-                return StatusCode(500, new { Error = "Error computing PnL snapshots", Details = ex.Message });
+                _logger.LogError(ex, "Error occurred while fetching PnL snapshots for ValuationDate: {ValuationDate}", dateToQuery);
+                return StatusCode(500, new { Error = "Error retrieving PnL snapshots", Details = ex.Message });
             }
         }
 

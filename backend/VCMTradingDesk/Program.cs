@@ -5,6 +5,7 @@ using VCM_DataAccess.Repos.IncrementalPositionLoader;
 using VCM_DataAccess.Repos.PnLCalculatorEngine;
 using VCM_DataAccess.Repos.SecuritiesView;
 using VCM_DataAccess.Repos.TradeBlotter;
+using VCMTradingDesk.BackgroundServices;
 
 namespace VCMTradingDesk
 {
@@ -39,6 +40,8 @@ namespace VCMTradingDesk
                 builder.Services.AddTransient<IPnLCalculatorEngine, PnLCalculatorEngineRepo>();
                 builder.Services.AddTransient<IIncrementalPositionLoader, IncrementalPositionLoaderRepo>();
                 builder.Services.AddTransient<IAssetSummaryRepo, AssetSummaryRepo>();
+
+                builder.Services.AddHostedService<DemoPositionLoaderWorker>();
 
                 builder.Services.AddCors(options => options.AddPolicy(
                     "CorsPolicy", policy => policy.WithOrigins("http://localhost:5173").AllowAnyHeader().WithMethods("GET")));

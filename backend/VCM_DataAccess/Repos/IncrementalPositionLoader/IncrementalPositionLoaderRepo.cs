@@ -19,7 +19,27 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
             _dbContext = dbContext;
             _calculator = calculator;
         }
+        public async Task<List<EodSnapshotRecordDto>> GetSnapshotsByDateAsync(DateOnly targetDate)
+        {
+            var snapshots = await (from s in _dbContext.EodSnapshots.AsNoTracking()
+            join sec in _dbContext.Securities.AsNoTracking() on s.SecurityId equals sec.SecurityId
+            where s.ValuationDate == targetDate
+            select new EodSnapshotRecordDto
+            {
+                ValuationDate = s.ValuationDate,
+                SecurityId = s.SecurityId,
+                SecurityName = sec.SecurityName ?? string.Empty,
+                AssetClass = sec.AssetClass ?? string.Empty,
+                NetQuantity = s.NetQuantity,
+                WeightedAvgCost = s.WeightedAvgCost,
+                CumulativeRealizedPnL = s.RealizedPnL,
+                UnrealizedPnL = s.UnrealizedPnL,
+                TotalPnL = s.TotalPnL,
+                ClosePrice = s.ClosePrice
+            }).ToListAsync();
 
+            return snapshots;
+        }
         public async Task<List<EodSnapshotRecordDto>> GetOrBackfillSnapshotsAsync(DateOnly targetDate)
         {
             var effectiveDate = await _dbContext.EodPrices
