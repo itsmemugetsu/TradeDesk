@@ -29,8 +29,17 @@ export const fetchEquityCurve = async (
     return response.data;
   } catch (error) {
     console.error('Failed to fetch equity curve:', error);
-    throw new Error(
-      error.response?.data?.message || 'Failed to retrieve equity curve data.'
-    );
   }
+
+  const responseData = error.response?.data;
+    const serverMessage = 
+      responseData?.message || 
+      responseData?.Message || 
+      responseData?.title || 
+      responseData?.Error || 
+      (typeof responseData === 'string' ? responseData : null) ||
+      error.message ||
+      'Failed to retrieve equity curve data.';
+
+    throw new Error(serverMessage);
 };

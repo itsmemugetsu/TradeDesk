@@ -13,13 +13,26 @@ export const fetchTradeBlotter = async (filters = {}, forceRefresh = false) => {
     if (cachedData) return cachedData;
   }
 
-  const response = await fetch(`${API_BASE_URL}/TradeBlotter?${queryParams.toString()}`);
+    const response = await fetch(`${API_BASE_URL}/TradeBlotter?${queryParams.toString()}`);
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.Error || `Server error: ${response.status}`);
+if (!response.ok) {
+    let serverMessage = `Server error: ${response.status}`;
+
+    try {
+      const errorData = await response.json();
+      // Extracts exact string from C# return BadRequest(new { message = "..." }) or NotFound(new { message = "..." })
+      serverMessage = 
+        errorData.message || 
+        errorData.Message || 
+        errorData.title || 
+        errorData.Error || 
+        serverMessage;
+    } catch {
+      // Fallback if response isn't JSON
+    }
+
+    throw new Error(serverMessage);
   }
-
   //save cache
   const data = await response.json();
   apiCache.set(cacheKey, data);

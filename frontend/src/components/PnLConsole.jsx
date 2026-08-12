@@ -77,7 +77,7 @@ export default function PnLConsole({ isActive }) {
       setPnlData(snapshot || []);
       setFetchedValuationDate(targetDate);
     } catch (err) {
-      throw new Error(err.response?.data?.message || err.message || 'Failed to fetch PnL snapshot.');
+      throw new Error(err.message || 'Failed to fetch PnL snapshot.'); //catching from the server
     }
   }, []);
 
@@ -96,7 +96,7 @@ export default function PnLConsole({ isActive }) {
       trajectoryCacheRef.current.set(cacheKey, trajectory || []);
       setChartData(trajectory || []);
     } catch (err) {
-      throw new Error(err.response?.data?.message || err.message || 'Failed to fetch trajectory curve.');
+     throw new Error(err.message || 'Failed to fetch trajectory curve.');
     }
   }, []);
 
@@ -138,9 +138,28 @@ export default function PnLConsole({ isActive }) {
   }, [valuationDate]);
 
   // Uses Cached Trajectory Data where available
+// Handles chart updates and catches backend errors when asset class or ticker changes
   useEffect(() => {
     if (!isActive || !hasLoadedRef.current) return;
-    loadTrajectoryData(valuationDate, selectedAssetClass, validSecurityId, false);
+
+    let isSubscribed = true;
+
+    const updateChartOnly = async () => {
+      try {
+        await loadTrajectoryData(valuationDate, selectedAssetClass, validSecurityId, false);
+        if (isSubscribed) setError(null);
+      } catch (err) {
+        if (isSubscribed) {
+          setError(err.message);
+        }
+      }
+    };
+
+    updateChartOnly();
+
+    return () => {
+      isSubscribed = false;
+    };
   }, [selectedAssetClass, validSecurityId, valuationDate, loadTrajectoryData, isActive]);
 
   const weekendDisclaimer = useMemo(() => {
