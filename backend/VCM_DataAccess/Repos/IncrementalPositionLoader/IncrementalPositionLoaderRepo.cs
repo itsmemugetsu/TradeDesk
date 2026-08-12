@@ -273,6 +273,17 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
                 string folderPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "exports");
                 string filePath = Path.Combine(folderPath, "PnL_Snapshots_2Feb_31Mar.csv");
 
+                // 1. Dynamically fetch the latest trade date from the database
+                DateOnly maxTradeDate = await _dbContext.Trades
+                    .AsNoTracking()
+                    .Select(t => (DateOnly?)t.TradeDate)
+                    .MaxAsync()
+                    ?? await _dbContext.EodSnapshots
+                        .AsNoTracking()
+                        .Select(s => (DateOnly?)s.ValuationDate)
+                        .MaxAsync()
+                    ?? new DateOnly(2026, 3, 31); // Fallback default if no trades exist
+
                 // If file already exists and no new snapshots were passed, do nothing
                 if (File.Exists(filePath) && (snapshotsToWrite == null || !snapshotsToWrite.Any()))
                 {
@@ -284,7 +295,7 @@ namespace VCM_DataAccess.Repos.IncrementalPositionLoader
                 {
                     snapshotsToWrite = await (from s in _dbContext.EodSnapshots.AsNoTracking()
                                               join sec in _dbContext.Securities.AsNoTracking() on s.SecurityId equals sec.SecurityId
-                                              where s.ValuationDate >= new DateOnly(2026, 2, 2) && s.ValuationDate <= new DateOnly(2026, 3, 31)
+                                              where s.ValuationDate >= new DateOnly(2026, 2, 2) && s.ValuationDate <= maxTradeDate
                                               select new EodSnapshotRecordDto
                                               {
                                                   ValuationDate = s.ValuationDate,
